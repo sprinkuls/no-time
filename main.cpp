@@ -14,6 +14,8 @@ int main() {
   SetTargetFPS(60); // Set our game to run at 60 frames-per-second
   //--------------------------------------------------------------------------------------
 
+  float counter = 10;
+
   // Main game loop
   while (!WindowShouldClose()) // Detect window close button or ESC key
   {
@@ -30,6 +32,20 @@ int main() {
 
     DrawText("Congrats! You created your first window!", 190, 200, 20,
              LIGHTGRAY);
+
+    // literally just delta time, given in seconds rather than milliseconds
+    float delta = GetFrameTime();
+    cout << delta * 60 << "\n";
+    // round the difference (really, take the ceil)
+
+    // yeah this works ok
+    counter -= delta;
+    int ceiled = ceil(counter);
+    if (ceiled >= 0) {
+      DrawText(TextFormat("counter: %i", ceiled), 190, 200, 20, BLACK);
+    } else {
+      DrawText("time up!", 190, 200, 20, BLACK);
+    }
 
     EndDrawing();
     //----------------------------------------------------------------------------------

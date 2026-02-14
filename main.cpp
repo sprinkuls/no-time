@@ -12,13 +12,21 @@ struct Style {
     Color bg;
 };
 
+// since the included raylib font has numbers that vary in width, (really, only the 1 is less wide
+// than the numbers), it's necessary to do all this mess to draw the timer so that, when a 1 appears
+// in either the tens place in the seconds, or the ones place in minutes, things don't jump around.
+
+// i could /also/ always not use a standard ticking down timer as the graphic. pomodoro originated
+// from a kitchen timer, no? why not make some fun little graphic for that then?
+void draw_timer() {}
+
 int main() {
     // Initialization
     //--------------------------------------------------------------------------------------
     const int screenWidth = 800;
     const int screenHeight = 450;
 
-    InitWindow(screenWidth, screenHeight, "raylib [core] example - basic window");
+    InitWindow(screenWidth, screenHeight, "san marzano");
 
     SetTargetFPS(60); // Set our game to run at 60 frames-per-second
     //--------------------------------------------------------------------------------------
@@ -28,12 +36,14 @@ int main() {
     // const float long_break_dur = 15 * 60; // 15 minutes, short break
 
     // temporary, much shorter values for testing
-    const float work_dur = 25;       // 25 minutes, work
-    const float short_break_dur = 5; // 5  minutes, short break
-    const float long_break_dur = 15; // 15 minutes, short break
+    const float work_dur = 11;       // 25 minutes, work
+    const float short_break_dur = 2; // 5  minutes, short break
+    const float long_break_dur = 4;  // 15 minutes, short break
+
+    const int timer_font_size = 50;
+    const int button_font_size = 50;
 
     Color text_color = BLACK;
-
     Color button_color = ORANGE;
     bool is_paused = true;
 
@@ -68,7 +78,7 @@ int main() {
 
     // stuff that may change loop to loop
     Color cur_bg_color = RAYWHITE;
-    string cur_button_text = "[ start ]";
+    string cur_button_text;
     Color cur_button_color = button_color;
 
     // Main loop
@@ -100,23 +110,11 @@ int main() {
         }
         string time_left = min_str + ":" + sec_str;
 
-        // Update the state based on time left
-        // so it'll be like:
-        //
-        // we check if timer is zero
-        //     if it is, then we set the timer to the amount of time in whatever
-        //     the next cycle is (say, 05:00 if work just ended), and set
-        //     is_paused to true.
-        //
-        // play sound
-
-        // awful
+        // handle behavior related to the one button; change colors
+        // on hover/click, and similarly set the correct cursor when hovering the button.
+        // also handles the behavior related to what happens when the button is pressed.
         cur_button_color = button_color;
-        // set the correct button color based on
         if (CheckCollisionPointRec(GetMousePosition(), button)) {
-            SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
-
-            // mouse over the button
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
                 // clicking the button
                 cur_button_color = ColorBrightness(cur_button_color, -0.1f);
@@ -128,23 +126,31 @@ int main() {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                 is_paused = !is_paused;
             }
-
-        } else {
-            SetMouseCursor(MOUSE_CURSOR_DEFAULT);
         }
 
+        if (IsKeyReleased(' ')) {
+            is_paused = !is_paused;
+        }
+
+        // change states, reset timer
         if (ceiled_time == 0) {
+            is_paused = true;
             if (state == work) {
                 if ((pomodoro_nr % 4) == 0) {
                     state = long_break;
+                    timer = long_break_dur;
+
                 } else {
                     state = short_break;
+                    timer = short_break_dur;
                 }
             } else {
                 state = work;
+                timer = work_dur;
                 pomodoro_nr++;
             }
         }
+        cur_button_text = (is_paused) ? ("start") : "pause";
 
         // END UPDATE SECTION
         //----------------------------------------------------------------------------------
@@ -153,18 +159,34 @@ int main() {
         //----------------------------------------------------------------------------------
         BeginDrawing();
 
+        // stuff that always gets drawn, but that changes based on the state of the timer (colors,
+        // exact text, etc.),
+
+        // BEGIN BUTTON STUFF ---------------------------------------------------------------
         ClearBackground(cur_bg_color);
         DrawRectangleRec(button, cur_button_color);
 
-        int text_width = MeasureText(cur_button_text.c_str(), 20);
-        DrawText(cur_button_text.c_str(), button.x, button.y, 20, BLACK);
+        // button label
+        int button_text_width = MeasureText(cur_button_text.c_str(), button_font_size);
 
-        // draw button and button text
+        int evil_btn_center_h = (button.width / 2) + button.x;
+        int evil_text_x = evil_btn_center_h - (button_text_width / 2);
 
-        if (is_paused) {
-            DrawText("[ paused ]", 300, 100, 20, BLACK);
-        }
-        // setwindowfocused
+        int evil_btn_center_v = (button.height / 2) + button.y;
+        int evil_text_y = evil_btn_center_v - (button_font_size / 2);
+
+        DrawText(cur_button_text.c_str(), evil_text_x, evil_text_y, button_font_size, text_color);
+        // END BUTTON STUFF ---------------------------------------------------------------------
+
+        // timer itself
+        // oh, dude, just draw each character individually.
+
+        // first digit = minutes / 10 (truncated so 0 will work properly
+        // second digit = minutes % 10
+        // ditto for seconds
+        int timer_text_width = MeasureText(time_left.c_str(), timer_font_size);
+        DrawText(time_left.c_str(), (screenWidth / 2) - (timer_text_width / 2), 0, timer_font_size,
+                 text_color);
 
         // set the right cursor based on if we're hovering the button
         if (CheckCollisionPointRec(GetMousePosition(), button)) {
@@ -172,22 +194,6 @@ int main() {
         } else {
             SetMouseCursor(MOUSE_CURSOR_DEFAULT);
         }
-
-        // if (ceiled_time > 0) {
-        //     DrawText(TextFormat(time_left.c_str(), ceiled_time), 190, 200, 20, text_color);
-        //     // elapsed += delta;
-        // } else {
-        //     state = short_break;
-        //     text_color = WHITE;
-        //     bg_color = SKYBLUE;
-        //
-        //     DrawText("time up!", 190, 200, 20, text_color);
-        //     // DrawText(TextFormat("elapsed: %f", elapsed), 190, 220, 20, text_color);
-        //     SetWindowFocused();
-        // }
-
-        // stuff that always gets drawn, but that changes based on the state of the timer
-        // (colors, exact text, etc.),
 
         EndDrawing();
         // END DRAWING

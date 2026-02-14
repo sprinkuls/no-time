@@ -28,6 +28,9 @@ int main() {
 
     InitWindow(screenWidth, screenHeight, "san marzano");
 
+    InitAudioDevice();
+    Sound changeover_sound = LoadSound("explosion_good.wav");
+
     SetTargetFPS(60); // Set our game to run at 60 frames-per-second
     //--------------------------------------------------------------------------------------
 
@@ -91,13 +94,11 @@ int main() {
             timer -= delta;
         }
 
-        // prevent from going negative so we can check when the timer has run
-        // out
-        int ceiled_time = max(0.0f, ceil(timer));
+        int time_left = max(0.0f, ceil(timer));
 
         // get number of minutes and seconds from the ceiled seconds
-        int mins = ceiled_time / 60;
-        int secs = ceiled_time % 60;
+        int mins = time_left / 60;
+        int secs = time_left % 60;
         string min_str = to_string(mins);
         string sec_str = to_string(secs);
 
@@ -108,7 +109,36 @@ int main() {
         if (secs < 10) {
             sec_str = "0" + sec_str;
         }
-        string time_left = min_str + ":" + sec_str;
+        string timer_display_text = min_str + ":" + sec_str;
+
+        // change states, reset timer
+        if (time_left == 0) {
+            PlaySound(changeover_sound);
+            is_paused = true;
+            string title = "May's Computer Program";
+            string message = "time for ";
+
+            if (state == work) {
+                if ((pomodoro_nr % 4) == 0) {
+                    message += "a long break!";
+                    state = long_break;
+                    timer = long_break_dur;
+
+                } else {
+                    message += "a break!";
+                    state = short_break;
+                    timer = short_break_dur;
+                }
+            } else {
+                message += "work!";
+                state = work;
+                timer = work_dur;
+                pomodoro_nr++;
+            }
+
+            string command = "notify-send \"" + title + "\"" + " " + "\"" + message + "\"";
+            system(command.c_str());
+        }
 
         // handle behavior related to the one button; change colors
         // on hover/click, and similarly set the correct cursor when hovering the button.
@@ -130,25 +160,6 @@ int main() {
 
         if (IsKeyReleased(' ')) {
             is_paused = !is_paused;
-        }
-
-        // change states, reset timer
-        if (ceiled_time == 0) {
-            is_paused = true;
-            if (state == work) {
-                if ((pomodoro_nr % 4) == 0) {
-                    state = long_break;
-                    timer = long_break_dur;
-
-                } else {
-                    state = short_break;
-                    timer = short_break_dur;
-                }
-            } else {
-                state = work;
-                timer = work_dur;
-                pomodoro_nr++;
-            }
         }
         cur_button_text = (is_paused) ? ("start") : "pause";
 
@@ -184,9 +195,9 @@ int main() {
         // first digit = minutes / 10 (truncated so 0 will work properly
         // second digit = minutes % 10
         // ditto for seconds
-        int timer_text_width = MeasureText(time_left.c_str(), timer_font_size);
-        DrawText(time_left.c_str(), (screenWidth / 2) - (timer_text_width / 2), 0, timer_font_size,
-                 text_color);
+        int timer_text_width = MeasureText(timer_display_text.c_str(), timer_font_size);
+        DrawText(timer_display_text.c_str(), (screenWidth / 2) - (timer_text_width / 2), 0,
+                 timer_font_size, text_color);
 
         // set the right cursor based on if we're hovering the button
         if (CheckCollisionPointRec(GetMousePosition(), button)) {
@@ -202,6 +213,9 @@ int main() {
 
     // De-Initialization
     //--------------------------------------------------------------------------------------
+
+    UnloadSound(changeover_sound);
+    CloseAudioDevice();
     CloseWindow(); // Close window and OpenGL context
     //--------------------------------------------------------------------------------------
 }

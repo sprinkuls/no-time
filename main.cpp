@@ -23,7 +23,6 @@ const Color MAY_GREEN = {110, 156, 28, 255};
 Color lerp(Color one, Color two, float t);
 void draw_phase(Phase phase);
 
-Font default_font = GetFontDefault();
 void draw_timer(int time_left) {
     // get number of minutes and seconds from the ceiled seconds
     int minutes = time_left / 60;
@@ -49,7 +48,7 @@ void draw_timer(int time_left) {
     int max_word_width = MeasureText("seconds", word_font_size);
 
     int number_base_x = (screenWidth / 2) - ((max_word_width + max_num_width + 20) / 2);
-    int number_base_y = 50;
+    int number_base_y = 70;
 
     DrawText(min_str.c_str(), number_base_x, number_base_y, number_font_size, MAY_ORANGE);
 
@@ -60,17 +59,6 @@ void draw_timer(int time_left) {
              MAY_ORANGE);
     DrawText("seconds", number_base_x + max_num_width + 20, number_base_y + number_font_size + 33,
              word_font_size, OFF_BLACK);
-
-    // DrawTextPro(default_font, "hello, world", {50, screenHeight / 2.0}, {0.0, 0.0}, 340, 45, 5,
-    //             text_color);
-
-    // // Color bright =3;
-    //
-    // Color calc = lerp(base, base, 1.0);
-    //
-    // const int base_font_size = 40;
-    // double sin_time = ((sin(GetTime() * 3)) + 2);
-    // DrawText("<|:3", 0, 0, (int)(sin_time * base_font_size), base);
 }
 
 double last_hit = -1;
@@ -232,7 +220,7 @@ int main() {
         BeginDrawing();
         ClearBackground(cur_bg_color);
         draw_timer(time_left);
-        // draw_phase(phase);
+        draw_phase(phase);
 
         // background_pulse(0.5);
 
@@ -298,16 +286,32 @@ Color lerp(Color one, Color two, float t) {
     return {r, g, b, a};
 }
 
+Rectangle header = {0, 0, screenWidth, 45};
 void draw_phase(Phase phase) {
+
+    string text;
+
     switch (phase) {
     case WORK:
-        DrawText("work..", 0, 0, 40, BLACK);
+        // text = "crack a copy of fl studio";
+        text = "get to work";
         break;
     case SHORT_BREAK:
-        DrawText("short break!", 0, 0, 40, BLACK);
+        text = "short break";
         break;
     case LONG_BREAK:
-        DrawText("long break!", 0, 0, 40, BLACK);
+        text = "long break";
         break;
     }
+
+    int font_size = 40;
+    int text_width = MeasureText(text.c_str(), font_size);
+
+    int text_x = (screenWidth * 0.5) - (text_width / 2.0);
+    int text_y = 0;
+
+    DrawRectangleRec(header, MAY_ORANGE);
+    DrawText(text.c_str(), text_x, text_y, font_size, OFF_WHITE);
 }
+
+void draw_pomodoro_nr(int nr) {}

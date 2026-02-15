@@ -12,19 +12,78 @@ struct Style {
     Color bg;
 };
 
+const int screenWidth = 800;
+const int screenHeight = 450;
+
 // since the included raylib font has numbers that vary in width, (really, only the 1 is less wide
 // than the numbers), it's necessary to do all this mess to draw the timer so that, when a 1 appears
 // in either the tens place in the seconds, or the ones place in minutes, things don't jump around.
 
 // i could /also/ always not use a standard ticking down timer as the graphic. pomodoro originated
 // from a kitchen timer, no? why not make some fun little graphic for that then?
-void draw_timer() {}
+Color lerp(Color one, Color two, float t) {
+    if (t > 1)
+        return two;
+    if (t < 0)
+        return one;
+
+    unsigned char r = one.r + (two.r - one.r) * t;
+    unsigned char g = one.g + (two.g - one.g) * t;
+    unsigned char b = one.b + (two.b - one.b) * t;
+    unsigned char a = one.a + (two.a - one.a) * t;
+    return {r, g, b, a};
+}
+
+void draw_timer(int time_left) {
+    // // get number of minutes and seconds from the ceiled seconds
+    // int minutes = time_left / 60;
+    // int seconds = time_left % 60;
+    // string min_str = to_string(minutes);
+    // string sec_str = to_string(seconds);
+    //
+    // // pad with a 0 so both values are always two characters wide
+    // if (minutes < 10) {
+    //     min_str = "0" + min_str;
+    // }
+    // if (seconds < 10) {
+    //     sec_str = "0" + sec_str;
+    // }
+
+    Color base = {235, 99, 86, 255};
+    // Color bright =3;
+
+    Color calc = lerp(base, base, 1.0);
+
+    const int base_font_size = 40;
+    double sin_time = ((sin(GetTime() * 3)) + 2);
+    DrawText("<|:3", 0, 0, (int)(sin_time * base_font_size), base);
+}
+
+double last_hit = -1;
+void background_pulse(double duration) {
+    // say, duration = 3 seconds
+
+    Color bright = {255, 255, 255, 255};
+    Color dark = {100, 100, 100, 255};
+
+    double cur_time = GetTime();
+
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        last_hit = cur_time;
+    }
+    auto time_since = cur_time - last_hit;
+    if (time_since > duration) {
+        ClearBackground(dark);
+    } else {
+        auto progression = time_since / duration;
+        auto progression_cos = cos((PI / 2) * progression);
+
+        ClearBackground(lerp(dark, bright, progression_cos));
+    }
+}
 
 int main() {
-    // Initialization
-    //--------------------------------------------------------------------------------------
-    const int screenWidth = 800;
-    const int screenHeight = 450;
+    // Raylib Initialization -----------------------------------------------------------
 
     InitWindow(screenWidth, screenHeight, "san marzano");
 
@@ -32,16 +91,16 @@ int main() {
     Sound changeover_sound = LoadSound("explosion_good.wav");
 
     SetTargetFPS(60); // Set our game to run at 60 frames-per-second
-    //--------------------------------------------------------------------------------------
+    //----------------------------------------------------------------------------------
 
     // const float work_dur = 25 * 60;       // 25 minutes, work
     // const float short_break_dur = 5 * 60; // 5  minutes, short break
     // const float long_break_dur = 15 * 60; // 15 minutes, short break
 
-    // temporary, much shorter values for testing
-    const float work_dur = 11;       // 25 minutes, work
-    const float short_break_dur = 2; // 5  minutes, short break
-    const float long_break_dur = 4;  // 15 minutes, short break
+    // temporary, much shorter values for development testing
+    const float work_dur = 11;
+    const float short_break_dur = 2;
+    const float long_break_dur = 4;
 
     const int timer_font_size = 50;
     const int button_font_size = 50;
@@ -50,43 +109,28 @@ int main() {
     Color button_color = ORANGE;
     bool is_paused = true;
 
-    // stuff for the one big button
+    // Setup for the one big button
     int button_width = 200;
     int button_height = 80;
     Rectangle button = {screenWidth / 2.0f - button_width / 2.0f,
                         screenHeight / 2.0f - button_height / 2.0f, (float)button_width,
                         (float)button_height};
+    button.height = 200;
 
-    // set up for the first cycle, which will be work
-    // how many phases have passed, to determine when should be work vs short vs
-    // long timer should be started
-    // we 1 index in this household
+    // Setup for the first cycle, which is work
     int pomodoro_nr = 1;
-
     enum State { work, short_break, long_break };
     State state = work;
     float timer = work_dur;
 
-    // want to set up pomodoro first, so:
-    // - button to start
-    // - button to pause
-    // - play sound when time up
-
-    // the loop is:
-    // 1. work, short break
-    // 2. work, short break
-    // 3. work, short break
-    // 4. work, long break
-    // and then repeat back at 1.
-
-    // stuff that may change loop to loop
-    Color cur_bg_color = RAYWHITE;
+    // Values that change loop to loop
+    Color cur_bg_color = {202, 69, 59, 255};
     string cur_button_text;
     Color cur_button_color = button_color;
 
     // Main loop
-    while (!WindowShouldClose()) // Detect window close button or ESC key
-    {
+    // TODO: don't close on ESC being hit
+    while (!WindowShouldClose()) {
         // Update
         //----------------------------------------------------------------------------------
         float delta = GetFrameTime(); // just returns delta time in seconds
@@ -140,9 +184,9 @@ int main() {
             system(command.c_str());
         }
 
-        // handle behavior related to the one button; change colors
-        // on hover/click, and similarly set the correct cursor when hovering the button.
-        // also handles the behavior related to what happens when the button is pressed.
+        // handle behavior related to the one button. change colors on hover/click
+        // set the correct cursor when hovering the button. also handles the behavior related to
+        // what happens when the button is pressed.
         cur_button_color = button_color;
         if (CheckCollisionPointRec(GetMousePosition(), button)) {
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
@@ -169,25 +213,24 @@ int main() {
         // BEGIN DRAWING
         //----------------------------------------------------------------------------------
         BeginDrawing();
-
-        // stuff that always gets drawn, but that changes based on the state of the timer (colors,
-        // exact text, etc.),
+        // ClearBackground(cur_bg_color);
+        background_pulse(0.5);
 
         // BEGIN BUTTON STUFF ---------------------------------------------------------------
-        ClearBackground(cur_bg_color);
         DrawRectangleRec(button, cur_button_color);
 
-        // button label
+        // center the button label within the button
         int button_text_width = MeasureText(cur_button_text.c_str(), button_font_size);
 
-        int evil_btn_center_h = (button.width / 2) + button.x;
-        int evil_text_x = evil_btn_center_h - (button_text_width / 2);
+        int btn_center_h = (button.width / 2) + button.x;
+        int btn_text_x = btn_center_h - (button_text_width / 2);
 
-        int evil_btn_center_v = (button.height / 2) + button.y;
-        int evil_text_y = evil_btn_center_v - (button_font_size / 2);
+        int btn_center_v = (button.height / 2) + button.y;
+        int btn_text_y = btn_center_v - (button_font_size / 2);
 
-        DrawText(cur_button_text.c_str(), evil_text_x, evil_text_y, button_font_size, text_color);
-        // END BUTTON STUFF ---------------------------------------------------------------------
+        DrawText(cur_button_text.c_str(), btn_text_x, btn_text_y, button_font_size, text_color);
+        // END BUTTON STUFF
+        // ---------------------------------------------------------------------
 
         // timer itself
         // oh, dude, just draw each character individually.
@@ -198,6 +241,8 @@ int main() {
         int timer_text_width = MeasureText(timer_display_text.c_str(), timer_font_size);
         DrawText(timer_display_text.c_str(), (screenWidth / 2) - (timer_text_width / 2), 0,
                  timer_font_size, text_color);
+
+        draw_timer(time_left);
 
         // set the right cursor based on if we're hovering the button
         if (CheckCollisionPointRec(GetMousePosition(), button)) {

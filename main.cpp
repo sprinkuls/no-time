@@ -7,87 +7,36 @@ enum Phase { WORK, SHORT_BREAK, LONG_BREAK };
 
 // Constants that are useful everywhere
 const int screenWidth = 600;
-const int screenHeight = 400;
+const int screenHeight = 380;
 
 const Color OFF_WHITE = {245, 240, 230, 255};
 const Color OFF_BLACK = {90, 84, 76, 255};
+const Color OFF_GREY = {169, 162, 153, 255};
 
-// const Color MAY_MAGENTA = {189, 71, 116, 255};
-// const Color MAY_MAGENTA = {228, 109, 159, 255};
 const Color MAY_MAGENTA = {215, 92, 123, 255};
 const Color MAY_ORANGE = {224, 127, 19, 255};
 const Color MAY_SKYBLUE = {28, 145, 228, 255};
-const Color MAY_PURPLE = {119, 126, 232, 255};
+const Color MAY_PURPLE = {166, 109, 211, 255};
+const Color MAY_ROSE = {218, 93, 94, 255};
+const Color MAY_CYAN = {0, 166, 176, 255};
 const Color MAY_GREEN = {110, 156, 28, 255};
 
 Color lerp(Color one, Color two, float t);
 void draw_phase(Phase phase);
+void draw_pomodoro_nr(int nr);
+void draw_header(Phase phase, int pomodoro_nr);
 
-void draw_timer(int time_left) {
-    // get number of minutes and seconds from the ceiled seconds
-    int minutes = time_left / 60;
-    int seconds = time_left % 60;
-    string min_str = to_string(minutes);
-    string sec_str = to_string(seconds);
+void draw_timer(int time_left);
 
-    // pad with a 0 so both values are always two characters wide
-    if (minutes < 10) {
-        min_str = "0" + min_str;
-    }
-    if (seconds < 10) {
-        sec_str = "0" + sec_str;
-    }
+void background_pulse(double duration);
 
-    Color base = {235, 99, 86, 255};
-    Color text_color = {255, 231, 213, 255};
-
-    int number_font_size = 100;
-    int word_font_size = number_font_size * 0.6;
-
-    int max_num_width = MeasureText("00", number_font_size);
-    int max_word_width = MeasureText("seconds", word_font_size);
-
-    int number_base_x = (screenWidth / 2) - ((max_word_width + max_num_width + 20) / 2);
-    int number_base_y = 70;
-
-    DrawText(min_str.c_str(), number_base_x, number_base_y, number_font_size, MAY_ORANGE);
-
-    DrawText("minutes", (number_base_x + max_num_width) + (20), number_base_y + (33),
-             word_font_size, OFF_BLACK);
-
-    DrawText(sec_str.c_str(), number_base_x, number_base_y + number_font_size, number_font_size,
-             MAY_ORANGE);
-    DrawText("seconds", number_base_x + max_num_width + 20, number_base_y + number_font_size + 33,
-             word_font_size, OFF_BLACK);
-}
-
-double last_hit = -1;
-void background_pulse(double duration) {
-    // say, duration = 3 seconds
-
-    Color bright = {255, 255, 255, 255};
-    Color dark = {100, 100, 100, 255};
-
-    double cur_time = GetTime();
-
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        last_hit = cur_time;
-    }
-    auto time_since = cur_time - last_hit;
-    if (time_since > duration) {
-        ClearBackground(dark);
-    } else {
-        auto progression = time_since / duration;
-        auto progression_cos = cos((PI / 2) * progression);
-
-        ClearBackground(lerp(dark, bright, progression_cos));
-    }
-}
+Color ACCENT = MAY_ORANGE;
 
 int main() {
     // Raylib Initialization -----------------------------------------------------------
 
-    InitWindow(screenWidth, screenHeight, "san marzano");
+    InitWindow(screenWidth, screenHeight, "small tomatoes");
+    SetExitKey(KEY_NULL); // prevent ESC from closing the window
 
     InitAudioDevice();
     Sound changeover_sound = LoadSound("explosion_good.wav");
@@ -95,14 +44,14 @@ int main() {
     SetTargetFPS(60); // Set our game to run at 60 frames-per-second
     //----------------------------------------------------------------------------------
 
-    const float work_dur = 25 * 60;       // 25 minutes, work
-    const float short_break_dur = 5 * 60; // 5  minutes, short break
-    const float long_break_dur = 15 * 60; // 15 minutes, short break
+    // const float work_dur = 25 * 60;       // 25 minutes, work
+    // const float short_break_dur = 5 * 60; // 5  minutes, short break
+    // const float long_break_dur = 15 * 60; // 15 minutes, short break
 
     // temporary, much shorter values for development testing
-    // const float work_dur = 11;
-    // const float short_break_dur = 2;
-    // const float long_break_dur = 4;
+    const float work_dur = 3;
+    const float short_break_dur = 1;
+    const float long_break_dur = 2;
 
     const int timer_font_size = 100;
     const int button_font_size = 50;
@@ -110,18 +59,16 @@ int main() {
     // const Color bg_color = {202, 69, 59, 255};
     const Color bg_color = OFF_WHITE;
     Color text_color = OFF_BLACK;
-    Color button_color = MAY_ORANGE;
     bool is_paused = true;
 
     // Setup for the one big button
-    int button_width = 200;
+    int button_width = 300;
     int button_height = 80;
     Rectangle button = {screenWidth / 2.0f - button_width / 2.0f,
                         screenHeight / 2.0f - button_height / 2.0f, (float)button_width,
                         (float)button_height};
     button.height = 80;
-    button.y = button.y + 100;
-    button.y = (screenHeight * 0.85) - button_height / 2.0f;
+    button.y = (310) - button_height / 2.0f;
 
     // Setup for the first cycle, which is work
     int pomodoro_nr = 1;
@@ -131,7 +78,7 @@ int main() {
     // Values that change loop to loop
     Color cur_bg_color = bg_color;
     string cur_button_text;
-    Color cur_button_color = button_color;
+    Color cur_button_color = ACCENT;
 
     // Main loop
     // TODO: don't close on ESC being hit
@@ -172,16 +119,18 @@ int main() {
                     message += "a long break!";
                     phase = LONG_BREAK;
                     timer = long_break_dur;
-
+                    ACCENT = MAY_PURPLE;
                 } else {
                     message += "a break!";
                     phase = SHORT_BREAK;
                     timer = short_break_dur;
+                    ACCENT = MAY_MAGENTA;
                 }
             } else {
                 message += "work!";
                 phase = WORK;
                 timer = work_dur;
+                ACCENT = MAY_ORANGE;
                 pomodoro_nr++;
             }
 
@@ -192,14 +141,14 @@ int main() {
         // handle behavior related to the one button. change colors on hover/click
         // set the correct cursor when hovering the button. also handles the behavior related to
         // what happens when the button is pressed.
-        cur_button_color = button_color;
+        cur_button_color = ACCENT;
         if (CheckCollisionPointRec(GetMousePosition(), button)) {
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
                 // clicking the button
-                cur_button_color = ColorBrightness(cur_button_color, -0.1f);
+                cur_button_color = ColorBrightness(ACCENT, -0.1f);
             } else {
                 // just hovering
-                cur_button_color = ColorBrightness(cur_button_color, 0.1f);
+                cur_button_color = ColorBrightness(ACCENT, 0.1f);
             }
 
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
@@ -219,10 +168,10 @@ int main() {
         //----------------------------------------------------------------------------------
         BeginDrawing();
         ClearBackground(cur_bg_color);
-        draw_timer(time_left);
-        draw_phase(phase);
 
-        // background_pulse(0.5);
+        draw_timer(time_left);
+        draw_header(phase, pomodoro_nr);
+        // draw_pomodoro_nr(pomodoro_nr);
 
         // BEGIN BUTTON STUFF ---------------------------------------------------------------
         DrawRectangleRec(button, cur_button_color);
@@ -239,18 +188,6 @@ int main() {
         DrawText(cur_button_text.c_str(), btn_text_x, btn_text_y, button_font_size, OFF_WHITE);
         // END BUTTON STUFF
         // ---------------------------------------------------------------------
-
-        // timer itself
-        // oh, dude, just draw each character individually.
-
-        // first digit = minutes / 10 (truncated so 0 will work properly
-        // second digit = minutes % 10
-        // ditto for seconds
-        // int timer_text_width = MeasureText(timer_display_text.c_str(), timer_font_size);
-        // DrawText(timer_display_text.c_str(), (screenWidth / 2) - (timer_text_width / 2), 0,
-        //          timer_font_size, text_color);
-
-        draw_timer(time_left);
 
         // set the right cursor based on if we're hovering the button
         if (CheckCollisionPointRec(GetMousePosition(), button)) {
@@ -286,32 +223,75 @@ Color lerp(Color one, Color two, float t) {
     return {r, g, b, a};
 }
 
-Rectangle header = {0, 0, screenWidth, 45};
-void draw_phase(Phase phase) {
+void draw_timer(int time_left) {
+    // get number of minutes and seconds from the ceiled seconds
+    int minutes = time_left / 60;
+    int seconds = time_left % 60;
+    string min_str = to_string(minutes);
+    string sec_str = to_string(seconds);
 
-    string text;
+    // pad with a 0 so both values are always two characters wide
+    if (minutes < 10) {
+        min_str = "0" + min_str;
+    }
+    if (seconds < 10) {
+        sec_str = "0" + sec_str;
+    }
+
+    Color base = {235, 99, 86, 255};
+    Color text_color = {255, 231, 213, 255};
+
+    int number_font_size = 100;
+    int word_font_size = number_font_size * 0.6;
+
+    int max_num_width = MeasureText("00", number_font_size);
+    int max_word_width = MeasureText("seconds", word_font_size);
+
+    int number_base_x = (screenWidth / 2) - ((max_word_width + max_num_width + 20) / 2);
+    int number_base_y = 60;
+
+    DrawText(min_str.c_str(), number_base_x, number_base_y, number_font_size, ACCENT);
+
+    DrawText("minutes", (number_base_x + max_num_width) + (20), number_base_y + (33),
+             word_font_size, OFF_BLACK);
+
+    DrawText(sec_str.c_str(), number_base_x, number_base_y + number_font_size, number_font_size,
+             ACCENT);
+    DrawText("seconds", number_base_x + max_num_width + 20, number_base_y + number_font_size + 33,
+             word_font_size, OFF_BLACK);
+}
+
+void draw_header(Phase phase, int pomodoro_nr) {
+    string text = "pomodoro #" + to_string(pomodoro_nr) + " - ";
 
     switch (phase) {
     case WORK:
-        // text = "crack a copy of fl studio";
-        text = "get to work";
+        text += "work";
         break;
     case SHORT_BREAK:
-        text = "short break";
+        text += "short break";
         break;
     case LONG_BREAK:
-        text = "long break";
+        text += "long break";
         break;
     }
 
-    int font_size = 40;
+    int font_size = 30;
     int text_width = MeasureText(text.c_str(), font_size);
 
     int text_x = (screenWidth * 0.5) - (text_width / 2.0);
-    int text_y = 0;
+    int text_y = 5;
 
-    DrawRectangleRec(header, MAY_ORANGE);
+    Rectangle header = {0, 0, screenWidth, 40};
+    DrawRectangleRec(header, ACCENT);
     DrawText(text.c_str(), text_x, text_y, font_size, OFF_WHITE);
-}
+};
 
-void draw_pomodoro_nr(int nr) {}
+/* TODO List
+ * I'd like to store, somewhere, the number of minutes of work done. It'd be nice to have as a
+ * little statistic to display.
+ *
+ * + Move the 'start' button up
+ *
+ * + Finalize color for breaks (if we're going to use a different one for short/long ones)
+ */

@@ -256,19 +256,13 @@ void draw_timer(int time_left) {
     // 30px - 20px - 10px - 50px
     // padding, '1', space between chars, number
 
-    int zero_width = MeasureText("0", number_font_size);
-    cout << "zw: " << zero_width << endl;
-    int one_width = MeasureText("1", 200);
-    cout << "1w: " << one_width << endl;
-
     int max_num_width = MeasureText("00", number_font_size);
-    cout << "mnw: " << max_num_width << endl;
     int max_word_width = MeasureText("seconds", word_font_size);
 
     int number_base_x = (screenWidth / 2) - ((max_word_width + max_num_width + 20) / 2);
     int number_base_y = 60;
 
-    // grey transparency (?)
+    // grey transparency (? i'm not sure if i ought to keep this)
     DrawText("00", number_base_x, number_base_y, number_font_size, OFF_GREY);
     DrawText("00", number_base_x, number_base_y + number_font_size, number_font_size, OFF_GREY);
 
@@ -277,6 +271,8 @@ void draw_timer(int time_left) {
         DrawText(minutes_tens_place.c_str(),
                  number_base_x + (number_font_size / 2) - (number_font_size / 5), number_base_y,
                  number_font_size, ACCENT);
+    } else if (minutes_tens_place == "0") {
+        // don't draw the leading zero
     } else {
         DrawText(minutes_tens_place.c_str(), number_base_x, number_base_y, number_font_size,
                  ACCENT);
@@ -287,14 +283,20 @@ void draw_timer(int time_left) {
                  (number_base_x + (number_font_size / 2)) +
                      ((number_font_size / 2) - (number_font_size / 5)) + (number_font_size / 10),
                  number_base_y, number_font_size, ACCENT);
+
     } else {
         DrawText(minutes_ones_place.c_str(),
                  number_base_x + (number_font_size / 2) + (number_font_size / 10), number_base_y,
                  number_font_size, ACCENT);
     }
 
-    DrawText("minutes", (number_base_x + max_num_width) + (20), number_base_y + (33),
-             word_font_size, OFF_BLACK);
+    if (minutes == 1) {
+        DrawText("minute", (number_base_x + max_num_width) + (20), number_base_y + (33),
+                 word_font_size, OFF_BLACK);
+    } else {
+        DrawText("minutes", (number_base_x + max_num_width) + (20), number_base_y + (33),
+                 word_font_size, OFF_BLACK);
+    }
 
     // seconds
     // DrawText(sec_str.c_str(), number_base_x, number_base_y + number_font_size, number_font_size,
@@ -303,6 +305,8 @@ void draw_timer(int time_left) {
         DrawText(seconds_tens_place.c_str(),
                  number_base_x + (number_font_size / 2) - (number_font_size / 5),
                  number_base_y + number_font_size, number_font_size, ACCENT);
+    } else if (seconds_tens_place == "0") {
+        // don't draw the leading zero
     } else {
         DrawText(seconds_tens_place.c_str(), number_base_x, number_base_y + number_font_size,
                  number_font_size, ACCENT);
@@ -318,9 +322,13 @@ void draw_timer(int time_left) {
                  number_base_x + (number_font_size / 2) + (number_font_size / 10),
                  number_base_y + number_font_size, number_font_size, ACCENT);
     }
-
-    DrawText("seconds", number_base_x + max_num_width + 20, number_base_y + number_font_size + 33,
-             word_font_size, OFF_BLACK);
+    if (seconds == 1) {
+        DrawText("second", number_base_x + max_num_width + 20,
+                 number_base_y + number_font_size + 33, word_font_size, OFF_BLACK);
+    } else {
+        DrawText("seconds", number_base_x + max_num_width + 20,
+                 number_base_y + number_font_size + 33, word_font_size, OFF_BLACK);
+    }
 }
 
 void draw_header(Phase phase, int pomodoro_nr) {
@@ -355,6 +363,4 @@ void draw_header(Phase phase, int pomodoro_nr) {
  *
  * + Sound that plays when you hit start/pause
  *
- * + Fix spacing for timer characters (specifically that all number characters are the same width,
- *   except '1' which is far less wide, and messes up alignment of everything.
  */

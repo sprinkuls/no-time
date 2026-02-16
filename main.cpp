@@ -11,7 +11,8 @@ const int screenHeight = 380;
 
 const Color OFF_WHITE = {245, 240, 230, 255};
 const Color OFF_BLACK = {90, 84, 76, 255};
-const Color OFF_GREY = {169, 162, 153, 255};
+// const Color OFF_GREY = {225, 217, 208, 255};
+const Color OFF_GREY = {238, 231, 221, 255};
 
 const Color MAY_MAGENTA = {215, 92, 123, 255};
 const Color MAY_ORANGE = {224, 127, 19, 255};
@@ -21,21 +22,20 @@ const Color MAY_ROSE = {218, 93, 94, 255};
 const Color MAY_CYAN = {0, 166, 176, 255};
 const Color MAY_GREEN = {110, 156, 28, 255};
 
+// "linear interpolation"
 Color lerp(Color one, Color two, float t);
-void draw_phase(Phase phase);
-void draw_pomodoro_nr(int nr);
+
 void draw_header(Phase phase, int pomodoro_nr);
-
 void draw_timer(int time_left);
-
-void background_pulse(double duration);
 
 Color ACCENT = MAY_ORANGE;
 
 int main() {
     // Raylib Initialization -----------------------------------------------------------
 
-    InitWindow(screenWidth, screenHeight, "small tomatoes");
+    const string application_name = "May's";
+
+    InitWindow(screenWidth, screenHeight, application_name.c_str());
     SetExitKey(KEY_NULL); // prevent ESC from closing the window
 
     InitAudioDevice();
@@ -49,7 +49,7 @@ int main() {
     // const float long_break_dur = 15 * 60; // 15 minutes, short break
 
     // temporary, much shorter values for development testing
-    const float work_dur = 3;
+    const float work_dur = 63;
     const float short_break_dur = 1;
     const float long_break_dur = 2;
 
@@ -70,7 +70,7 @@ int main() {
     button.height = 80;
     button.y = (310) - button_height / 2.0f;
 
-    // Setup for the first cycle, which is work
+    // Initialization for the first cycle, which is work
     int pomodoro_nr = 1;
     Phase phase = WORK;
     float timer = work_dur;
@@ -111,7 +111,7 @@ int main() {
         if (time_left == 0) {
             PlaySound(changeover_sound);
             is_paused = true;
-            string title = "May's Computer Program";
+            string title = application_name;
             string message = "time for ";
 
             if (phase == WORK) {
@@ -134,6 +134,8 @@ int main() {
                 pomodoro_nr++;
             }
 
+            // TODO: this is a hack to send a notification on linux, i'm sure there's a better or
+            // more general way to do this though
             string command = "notify-send \"" + title + "\"" + " " + "\"" + message + "\"";
             system(command.c_str());
         }
@@ -144,10 +146,10 @@ int main() {
         cur_button_color = ACCENT;
         if (CheckCollisionPointRec(GetMousePosition(), button)) {
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-                // clicking the button
+                // clicking
                 cur_button_color = ColorBrightness(ACCENT, -0.1f);
             } else {
-                // just hovering
+                // hovering
                 cur_button_color = ColorBrightness(ACCENT, 0.1f);
             }
 
@@ -224,19 +226,16 @@ Color lerp(Color one, Color two, float t) {
 }
 
 void draw_timer(int time_left) {
-    // get number of minutes and seconds from the ceiled seconds
     int minutes = time_left / 60;
     int seconds = time_left % 60;
     string min_str = to_string(minutes);
     string sec_str = to_string(seconds);
 
-    // pad with a 0 so both values are always two characters wide
-    if (minutes < 10) {
-        min_str = "0" + min_str;
-    }
-    if (seconds < 10) {
-        sec_str = "0" + sec_str;
-    }
+    string minutes_tens_place = to_string(minutes / 10);
+    string minutes_ones_place = to_string(minutes % 10);
+
+    string seconds_tens_place = to_string(seconds / 10);
+    string seconds_ones_place = to_string(seconds % 10);
 
     Color base = {235, 99, 86, 255};
     Color text_color = {255, 231, 213, 255};
@@ -244,19 +243,82 @@ void draw_timer(int time_left) {
     int number_font_size = 100;
     int word_font_size = number_font_size * 0.6;
 
+    // in the default font, each number character (besides 1) is (font_size / 2) px wide, and will
+    // have (font_size / 10) px space between them. the '1' character, however, is far slimmer
+    // (font_size / 5), and so simply drawing the '1' character as part of a longer string will mess
+    // up the nice alignment that all other numbers have.
+
+    // example with font size 100:
+    // so, with most number chars, it's:
+    // 50px - 10px - 50px
+    // number, space between chars, number
+    // but if we have a one in the tens place, it needs to be:
+    // 30px - 20px - 10px - 50px
+    // padding, '1', space between chars, number
+
+    int zero_width = MeasureText("0", number_font_size);
+    cout << "zw: " << zero_width << endl;
+    int one_width = MeasureText("1", 200);
+    cout << "1w: " << one_width << endl;
+
     int max_num_width = MeasureText("00", number_font_size);
+    cout << "mnw: " << max_num_width << endl;
     int max_word_width = MeasureText("seconds", word_font_size);
 
     int number_base_x = (screenWidth / 2) - ((max_word_width + max_num_width + 20) / 2);
     int number_base_y = 60;
 
-    DrawText(min_str.c_str(), number_base_x, number_base_y, number_font_size, ACCENT);
+    // grey transparency (?)
+    DrawText("00", number_base_x, number_base_y, number_font_size, OFF_GREY);
+    DrawText("00", number_base_x, number_base_y + number_font_size, number_font_size, OFF_GREY);
+
+    // minutes
+    if (minutes_tens_place == "1") {
+        DrawText(minutes_tens_place.c_str(),
+                 number_base_x + (number_font_size / 2) - (number_font_size / 5), number_base_y,
+                 number_font_size, ACCENT);
+    } else {
+        DrawText(minutes_tens_place.c_str(), number_base_x, number_base_y, number_font_size,
+                 ACCENT);
+    }
+
+    if (minutes_ones_place == "1") {
+        DrawText(minutes_ones_place.c_str(),
+                 (number_base_x + (number_font_size / 2)) +
+                     ((number_font_size / 2) - (number_font_size / 5)) + (number_font_size / 10),
+                 number_base_y, number_font_size, ACCENT);
+    } else {
+        DrawText(minutes_ones_place.c_str(),
+                 number_base_x + (number_font_size / 2) + (number_font_size / 10), number_base_y,
+                 number_font_size, ACCENT);
+    }
 
     DrawText("minutes", (number_base_x + max_num_width) + (20), number_base_y + (33),
              word_font_size, OFF_BLACK);
 
-    DrawText(sec_str.c_str(), number_base_x, number_base_y + number_font_size, number_font_size,
-             ACCENT);
+    // seconds
+    // DrawText(sec_str.c_str(), number_base_x, number_base_y + number_font_size, number_font_size,
+    //          ACCENT);
+    if (seconds_tens_place == "1") {
+        DrawText(seconds_tens_place.c_str(),
+                 number_base_x + (number_font_size / 2) - (number_font_size / 5),
+                 number_base_y + number_font_size, number_font_size, ACCENT);
+    } else {
+        DrawText(seconds_tens_place.c_str(), number_base_x, number_base_y + number_font_size,
+                 number_font_size, ACCENT);
+    }
+
+    if (seconds_ones_place == "1") {
+        DrawText(seconds_ones_place.c_str(),
+                 (number_base_x + (number_font_size / 2)) +
+                     ((number_font_size / 2) - (number_font_size / 5)) + (number_font_size / 10),
+                 number_base_y + number_font_size, number_font_size, ACCENT);
+    } else {
+        DrawText(seconds_ones_place.c_str(),
+                 number_base_x + (number_font_size / 2) + (number_font_size / 10),
+                 number_base_y + number_font_size, number_font_size, ACCENT);
+    }
+
     DrawText("seconds", number_base_x + max_num_width + 20, number_base_y + number_font_size + 33,
              word_font_size, OFF_BLACK);
 }
@@ -291,7 +353,8 @@ void draw_header(Phase phase, int pomodoro_nr) {
  * I'd like to store, somewhere, the number of minutes of work done. It'd be nice to have as a
  * little statistic to display.
  *
- * + Move the 'start' button up
+ * + Sound that plays when you hit start/pause
  *
- * + Finalize color for breaks (if we're going to use a different one for short/long ones)
+ * + Fix spacing for timer characters (specifically that all number characters are the same width,
+ *   except '1' which is far less wide, and messes up alignment of everything.
  */

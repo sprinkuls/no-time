@@ -3,69 +3,61 @@
 
 using namespace std;
 
-enum Phase { WORK, SHORT_BREAK, LONG_BREAK };
-
-// Constants that are useful everywhere
-const int screenWidth = 600;
-const int screenHeight = 380;
+const string APP_NAME = "Tomayto";
+const int screen_width = 600;
+const int screen_height = 380;
 
 const Color OFF_WHITE = {245, 240, 230, 255};
 const Color OFF_BLACK = {90, 84, 76, 255};
-// const Color OFF_GREY = {225, 217, 208, 255};
 const Color OFF_GREY = {238, 231, 221, 255};
 
-const Color MAY_MAGENTA = {215, 92, 123, 255};
 const Color MAY_ORANGE = {224, 127, 19, 255};
-const Color MAY_SKYBLUE = {28, 145, 228, 255};
+const Color MAY_MAGENTA = {215, 92, 123, 255};
 const Color MAY_PURPLE = {166, 109, 211, 255};
-const Color MAY_ROSE = {218, 93, 94, 255};
-const Color MAY_CYAN = {0, 166, 176, 255};
-const Color MAY_GREEN = {110, 156, 28, 255};
+const Color MAY_SKYBLUE = {28, 145, 228, 255};
 
-// "linear interpolation"
-Color lerp(Color one, Color two, float t);
+const Color BG_COLOR = OFF_WHITE;
+const Color FG_COLOR = OFF_BLACK;
+// non-const as the accent color changes with phase
+Color ACCENT = MAY_ORANGE;
+
+enum Phase { WORK, SHORT_BREAK, LONG_BREAK };
 
 void draw_header(Phase phase, int pomodoro_nr);
 void draw_timer(int time_left);
 
-Color ACCENT = MAY_ORANGE;
-
 int main() {
     // Raylib Initialization -----------------------------------------------------------
 
-    const string application_name = "May's";
-
-    InitWindow(screenWidth, screenHeight, application_name.c_str());
+    InitWindow(screen_width, screen_height, APP_NAME.c_str());
     SetExitKey(KEY_NULL); // prevent ESC from closing the window
 
     InitAudioDevice();
     Sound changeover_sound = LoadSound("explosion_good.wav");
 
-    SetTargetFPS(60); // Set our game to run at 60 frames-per-second
+    int monitor_nr = GetCurrentMonitor();
+    int refresh_rate = GetMonitorRefreshRate(monitor_nr);
+    cout << monitor_nr << ": " << refresh_rate << endl;
+    SetTargetFPS(refresh_rate);
     //----------------------------------------------------------------------------------
 
-    // const float work_dur = 25 * 60;       // 25 minutes, work
-    // const float short_break_dur = 5 * 60; // 5  minutes, short break
-    // const float long_break_dur = 15 * 60; // 15 minutes, short break
+    const float work_dur = 25 * 60;       // 25 minutes, work
+    const float short_break_dur = 5 * 60; // 5  minutes, short break
+    const float long_break_dur = 15 * 60; // 15 minutes, short break
 
     // temporary, much shorter values for development testing
-    const float work_dur = 63;
-    const float short_break_dur = 1;
-    const float long_break_dur = 2;
+    // const float work_dur = 61;
+    // const float short_break_dur = 1;
+    // const float long_break_dur = 2;
 
-    const int timer_font_size = 100;
-    const int button_font_size = 50;
-
-    // const Color bg_color = {202, 69, 59, 255};
-    const Color bg_color = OFF_WHITE;
-    Color text_color = OFF_BLACK;
     bool is_paused = true;
+    const int button_font_size = 50;
 
     // Setup for the one big button
     int button_width = 300;
     int button_height = 80;
-    Rectangle button = {screenWidth / 2.0f - button_width / 2.0f,
-                        screenHeight / 2.0f - button_height / 2.0f, (float)button_width,
+    Rectangle button = {screen_width / 2.0f - button_width / 2.0f,
+                        screen_height / 2.0f - button_height / 2.0f, (float)button_width,
                         (float)button_height};
     button.height = 80;
     button.y = (310) - button_height / 2.0f;
@@ -76,7 +68,7 @@ int main() {
     float timer = work_dur;
 
     // Values that change loop to loop
-    Color cur_bg_color = bg_color;
+    Color cur_bg_color = BG_COLOR;
     string cur_button_text;
     Color cur_button_color = ACCENT;
 
@@ -111,7 +103,7 @@ int main() {
         if (time_left == 0) {
             PlaySound(changeover_sound);
             is_paused = true;
-            string title = application_name;
+            string title = APP_NAME;
             string message = "time for ";
 
             if (phase == WORK) {
@@ -212,19 +204,6 @@ int main() {
     //--------------------------------------------------------------------------------------
 }
 
-Color lerp(Color one, Color two, float t) {
-    if (t > 1)
-        return two;
-    if (t < 0)
-        return one;
-
-    unsigned char r = one.r + (two.r - one.r) * t;
-    unsigned char g = one.g + (two.g - one.g) * t;
-    unsigned char b = one.b + (two.b - one.b) * t;
-    unsigned char a = one.a + (two.a - one.a) * t;
-    return {r, g, b, a};
-}
-
 void draw_timer(int time_left) {
     int minutes = time_left / 60;
     int seconds = time_left % 60;
@@ -236,9 +215,6 @@ void draw_timer(int time_left) {
 
     string seconds_tens_place = to_string(seconds / 10);
     string seconds_ones_place = to_string(seconds % 10);
-
-    Color base = {235, 99, 86, 255};
-    Color text_color = {255, 231, 213, 255};
 
     int number_font_size = 100;
     int word_font_size = number_font_size * 0.6;
@@ -259,7 +235,7 @@ void draw_timer(int time_left) {
     int max_num_width = MeasureText("00", number_font_size);
     int max_word_width = MeasureText("seconds", word_font_size);
 
-    int number_base_x = (screenWidth / 2) - ((max_word_width + max_num_width + 20) / 2);
+    int number_base_x = (screen_width / 2) - ((max_word_width + max_num_width + 20) / 2);
     int number_base_y = 60;
 
     // grey transparency (? i'm not sure if i ought to keep this)
@@ -324,10 +300,10 @@ void draw_timer(int time_left) {
     }
     if (seconds == 1) {
         DrawText("second", number_base_x + max_num_width + 20,
-                 number_base_y + number_font_size + 33, word_font_size, OFF_BLACK);
+                 number_base_y + number_font_size + 33, word_font_size, FG_COLOR);
     } else {
         DrawText("seconds", number_base_x + max_num_width + 20,
-                 number_base_y + number_font_size + 33, word_font_size, OFF_BLACK);
+                 number_base_y + number_font_size + 33, word_font_size, FG_COLOR);
     }
 }
 
@@ -349,17 +325,22 @@ void draw_header(Phase phase, int pomodoro_nr) {
     int font_size = 30;
     int text_width = MeasureText(text.c_str(), font_size);
 
-    int text_x = (screenWidth * 0.5) - (text_width / 2.0);
+    int text_x = (screen_width * 0.5) - (text_width / 2.0);
     int text_y = 5;
 
-    Rectangle header = {0, 0, screenWidth, 40};
+    Rectangle header = {0, 0, screen_width, 40};
     DrawRectangleRec(header, ACCENT);
-    DrawText(text.c_str(), text_x, text_y, font_size, OFF_WHITE);
+    DrawText(text.c_str(), text_x, text_y, font_size, BG_COLOR);
 };
 
 /* TODO List
  * I'd like to store, somewhere, the number of minutes of work done. It'd be nice to have as a
  * little statistic to display.
+ *
+ * https://specifications.freedesktop.org/basedir/latest/
+ * $XDG_DATA_HOME
+ * "if $XDG_DATA_HOME is either not set or empty, a default equal to $HOME/.local/share should be
+ * used."
  *
  * + Sound that plays when you hit start/pause
  *

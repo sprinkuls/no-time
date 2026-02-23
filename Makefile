@@ -1,2 +1,2 @@
 main:
-	g++ main.cpp -lraylib -Wall
+	g++ main.cpp -std=c++17 -lraylib -Wall

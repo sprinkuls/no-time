@@ -1,11 +1,11 @@
 #include <bits/stdc++.h>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <raylib.h>
 
 using namespace std;
-
-const string APP_NAME = "Tomayto";
-const int screen_width = 600;
-const int screen_height = 380;
+namespace fs = std::filesystem;
 
 const Color OFF_WHITE = {245, 240, 230, 255};
 const Color OFF_BLACK = {90, 84, 76, 255};
@@ -18,16 +18,115 @@ const Color MAY_SKYBLUE = {28, 145, 228, 255};
 
 const Color BG_COLOR = OFF_WHITE;
 const Color FG_COLOR = OFF_BLACK;
-// non-const as the accent color changes with phase
-Color ACCENT = MAY_ORANGE;
+Color ACCENT = MAY_ORANGE; // non-const as the accent color changes with phase
 
 enum Phase { WORK, SHORT_BREAK, LONG_BREAK };
+
+const string APP_NAME = "Tomayto";
+const int screen_width = 600;
+const int screen_height = 380;
+
+const float work_dur = 25 * 60;       // 25 minutes, work
+const float short_break_dur = 5 * 60; // 5  minutes, short break
+const float long_break_dur = 15 * 60; // 15 minutes, short break
+// short testing values:
+// const float work_dur = 61;
+// const float short_break_dur = 1;
+// const float long_break_dur = 2;
 
 void draw_header(Phase phase, int pomodoro_nr);
 void draw_timer(int time_left);
 
+// TODO: this
+void notify() {
+#if defined(__linux__)
+    std::cout << "linux" << "\n";
+#elif defined(_WIN32)
+    std::cout << "not on linux" << "\n";
+#else
+
+#endif
+}
+
+// store the amount of working time that's been tracked by tomayto
+// returns the number of SECONDS that have been spent working,
+// or -1 on failure of some sort
+int update_time_on_disk() {
+#if defined(__linux__)
+    // based on: https://specifications.freedesktop.org/basedir/latest/
+
+    // this whole block figures out where to store data, and after exiting,
+    // "base_path" will be set to a valid path for storing program data
+    fs::path base_path;
+    const char *xdg_data_home = getenv("XDG_DATA_HOME");
+    if (!xdg_data_home || strcmp(xdg_data_home, "") == 0) {
+
+        // $HOME always set on linux, so don't need to check validity
+        fs::path path_to_use = string(getenv("HOME"));
+        path_to_use = path_to_use / ".local/share";
+
+        if (!fs::is_directory(path_to_use)) {
+            return -1; // TODO: handle this?
+        }
+        base_path = path_to_use;
+    } else {
+        // non-empty, non-null XDG_DATA_HOME path given
+        if (!fs::is_directory(xdg_data_home)) {
+            return -1; // TODO: handle this?
+        }
+        base_path = xdg_data_home;
+    }
+    cout << "Base path for data: " << base_path << "\n";
+
+    // create/find tomayto directory
+    fs::path tomayto_path;
+    tomayto_path = base_path / "tomayto";
+    cout << "Tomayto path: " << tomayto_path << "\n";
+
+    if (!fs::is_directory(tomayto_path)) {
+        cout << "Creating directory tomayto at " << base_path << "\n";
+        if (!fs::create_directory(tomayto_path)) {
+            cout << "ERROR: failed to create directory " << tomayto_path << "\n";
+            return -1; // TODO: handle this?
+        }
+    } else {
+        cout << "Found Tomayto data folder at " << tomayto_path << "\n";
+    }
+
+    // create/locate data.txt file
+    fs::path data_file_path = tomayto_path / "data.txt";
+    int seconds = 0;
+    if (!fs::exists(data_file_path)) {
+        ofstream data_file{data_file_path};
+        // data_file << 0 << endl;
+        // data_file.close();
+        cout << "Created new data file at: " << data_file_path << "\n";
+    } else {
+        ifstream data_file(data_file_path);
+        data_file >> seconds;
+        data_file.close();
+        cout << "Data file found at: " << data_file_path << "\n";
+    }
+
+    // update the file with the new time spent working
+    seconds += work_dur;
+    ofstream data_file(data_file_path);
+    data_file << seconds << endl;
+    data_file.close();
+
+    return seconds;
+
+#endif
+    // TODO: non-linux
+    return -1;
+}
+
 int main() {
     // Raylib Initialization -----------------------------------------------------------
+
+    // TODO: don't actually call this here
+    update_time_on_disk();
+    return 0;
 
     InitWindow(screen_width, screen_height, APP_NAME.c_str());
     SetExitKey(KEY_NULL); // prevent ESC from closing the window
@@ -40,15 +139,6 @@ int main() {
     cout << monitor_nr << ": " << refresh_rate << endl;
     SetTargetFPS(refresh_rate);
     //----------------------------------------------------------------------------------
-
-    const float work_dur = 25 * 60;       // 25 minutes, work
-    const float short_break_dur = 5 * 60; // 5  minutes, short break
-    const float long_break_dur = 15 * 60; // 15 minutes, short break
-
-    // temporary, much shorter values for development testing
-    // const float work_dur = 61;
-    // const float short_break_dur = 1;
-    // const float long_break_dur = 2;
 
     bool is_paused = true;
     const int button_font_size = 50;
@@ -344,4 +434,5 @@ void draw_header(Phase phase, int pomodoro_nr) {
  *
  * + Sound that plays when you hit start/pause
  *
+ * + Proper icon for the application
  */

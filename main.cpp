@@ -1,8 +1,11 @@
-#include <bits/stdc++.h>
+#include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
+#include <iostream>
 #include <raylib.h>
+#include <string>
+#include <vector>
 
 using namespace std;
 namespace fs = std::filesystem;
@@ -22,13 +25,13 @@ Color ACCENT = MAY_ORANGE; // non-const as the accent color changes with phase
 
 enum Phase { WORK, SHORT_BREAK, LONG_BREAK };
 
-const string APP_NAME = "Tomayto";
-const int screen_width = 600;
-const int screen_height = 380;
+const char *APP_NAME = "Tomayto";
+const int SCREEN_WIDTH = 600;
+const int SCREEN_HEIGHT = 380;
 
-const float work_dur = 25 * 60;       // 25 minutes, work
-const float short_break_dur = 5 * 60; // 5  minutes, short break
-const float long_break_dur = 15 * 60; // 15 minutes, short break
+const float WORK_DUR = 25 * 60;       // 25 minutes, work
+const float SHORT_BREAK_DUR = 5 * 60; // 5  minutes, short break
+const float LONG_BREAK_DUR = 15 * 60; // 15 minutes, short break
 // short testing values:
 // const float work_dur = 61;
 // const float short_break_dur = 1;
@@ -36,6 +39,53 @@ const float long_break_dur = 15 * 60; // 15 minutes, short break
 
 void draw_header(Phase phase, int pomodoro_nr);
 void draw_timer(int time_left);
+
+class Button {
+  private:
+    static vector<Button *> buttons;
+
+    int width;
+    int height;
+
+    int x;
+    int y;
+    Rectangle rect;
+
+    Color body_color;
+    Color text_color;
+
+    void update() {
+        // derive what color the button should be from base color, as
+        // well as from if the button is being hovered / clicked
+        Color draw_color;
+        if (CheckCollisionPointRec(GetMousePosition(), this->rect)) {
+            SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
+
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                draw_color = ColorBrightness(body_color, -0.1f);
+            } else {
+                draw_color = ColorBrightness(body_color, 0.1f);
+            }
+        } else {
+            SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+            draw_color = body_color;
+        }
+        DrawRectangleRec(this->rect, draw_color);
+    }
+
+  public:
+    static void update_buttons() {
+        SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+        for (auto btn : buttons) {
+            btn->update();
+        }
+    }
+
+    Button(float x, float y, float width, float height) {
+        this->rect = {x, y, width, height};
+        buttons.push_back(this);
+    };
+};
 
 // TODO: this
 void notify() {
@@ -48,16 +98,14 @@ void notify() {
 #endif
 }
 
-// store the amount of working time that's been tracked by tomayto
+// store the amount of working time that's been tracked by tomayto.
 // returns the number of SECONDS that have been spent working,
 // or -1 on failure of some sort
-int update_time_on_disk() {
+int update_time_on_disk(int increment = WORK_DUR) {
+    fs::path base_path;
+
 #if defined(__linux__)
     // based on: https://specifications.freedesktop.org/basedir/latest/
-
-    // this whole block figures out where to store data, and after exiting,
-    // "base_path" will be set to a valid path for storing program data
-    fs::path base_path;
     const char *xdg_data_home = getenv("XDG_DATA_HOME");
     if (!xdg_data_home || strcmp(xdg_data_home, "") == 0) {
 
@@ -76,6 +124,16 @@ int update_time_on_disk() {
         }
         base_path = xdg_data_home;
     }
+
+#elif defined(_WIN32)
+    const char *appdata = getenv("APPDATA");
+    cout << "appdata path: " << appdata << "\n";
+    return -1;
+#elif defined(__APPLE__)
+    return -1;
+#else
+    return -1;
+#endif
     cout << "Base path for data: " << base_path << "\n";
 
     // create/find tomayto directory
@@ -109,14 +167,13 @@ int update_time_on_disk() {
     }
 
     // update the file with the new time spent working
-    seconds += work_dur;
+    seconds += increment;
     ofstream data_file(data_file_path);
     data_file << seconds << endl;
     data_file.close();
 
     return seconds;
 
-#endif
     // TODO: non-linux
     return -1;
 }
@@ -124,11 +181,7 @@ int update_time_on_disk() {
 int main() {
     // Raylib Initialization -----------------------------------------------------------
 
-    // TODO: don't actually call this here
-    update_time_on_disk();
-    return 0;
-
-    InitWindow(screen_width, screen_height, APP_NAME.c_str());
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, APP_NAME);
     SetExitKey(KEY_NULL); // prevent ESC from closing the window
 
     InitAudioDevice();
@@ -146,8 +199,8 @@ int main() {
     // Setup for the one big button
     int button_width = 300;
     int button_height = 80;
-    Rectangle button = {screen_width / 2.0f - button_width / 2.0f,
-                        screen_height / 2.0f - button_height / 2.0f, (float)button_width,
+    Rectangle button = {SCREEN_WIDTH / 2.0f - button_width / 2.0f,
+                        SCREEN_HEIGHT / 2.0f - button_height / 2.0f, (float)button_width,
                         (float)button_height};
     button.height = 80;
     button.y = (310) - button_height / 2.0f;
@@ -155,7 +208,7 @@ int main() {
     // Initialization for the first cycle, which is work
     int pomodoro_nr = 1;
     Phase phase = WORK;
-    float timer = work_dur;
+    float timer = WORK_DUR;
 
     // Values that change loop to loop
     Color cur_bg_color = BG_COLOR;
@@ -163,7 +216,6 @@ int main() {
     Color cur_button_color = ACCENT;
 
     // Main loop
-    // TODO: don't close on ESC being hit
     while (!WindowShouldClose()) {
         // Update
         //----------------------------------------------------------------------------------
@@ -197,27 +249,32 @@ int main() {
             string message = "time for ";
 
             if (phase == WORK) {
+                int seconds_working = update_time_on_disk();
+                if (seconds_working != -1)
+                    cout << "wow! you've spent " << (int)(seconds_working / 60) << "minutes and "
+                         << (int)(seconds_working % 60) << "seconds working!"
+                         << "we're all so proud\n";
                 if ((pomodoro_nr % 4) == 0) {
                     message += "a long break!";
                     phase = LONG_BREAK;
-                    timer = long_break_dur;
+                    timer = LONG_BREAK_DUR;
                     ACCENT = MAY_PURPLE;
                 } else {
                     message += "a break!";
                     phase = SHORT_BREAK;
-                    timer = short_break_dur;
+                    timer = SHORT_BREAK_DUR;
                     ACCENT = MAY_MAGENTA;
                 }
             } else {
                 message += "work!";
                 phase = WORK;
-                timer = work_dur;
+                timer = WORK_DUR;
                 ACCENT = MAY_ORANGE;
                 pomodoro_nr++;
             }
 
-            // TODO: this is a hack to send a notification on linux, i'm sure there's a better or
-            // more general way to do this though
+            // TODO: this is a hack to send a notification on linux, i'm sure there's a better
+            // or more general way to do this though
             string command = "notify-send \"" + title + "\"" + " " + "\"" + message + "\"";
             system(command.c_str());
         }
@@ -287,6 +344,11 @@ int main() {
 
     // De-Initialization
     //--------------------------------------------------------------------------------------
+    // even if we end the phase early, stil
+    if (phase == WORK) {
+        int seconds_worked = WORK_DUR - max(0.0f, ceil(timer));
+        update_time_on_disk(seconds_worked);
+    }
 
     UnloadSound(changeover_sound);
     CloseAudioDevice();
@@ -309,10 +371,10 @@ void draw_timer(int time_left) {
     int number_font_size = 100;
     int word_font_size = number_font_size * 0.6;
 
-    // in the default font, each number character (besides 1) is (font_size / 2) px wide, and will
-    // have (font_size / 10) px space between them. the '1' character, however, is far slimmer
-    // (font_size / 5), and so simply drawing the '1' character as part of a longer string will mess
-    // up the nice alignment that all other numbers have.
+    // in the default font, each number character (besides 1) is (font_size / 2) px wide, and
+    // will have (font_size / 10) px space between them. the '1' character, however, is far
+    // slimmer (font_size / 5), and so simply drawing the '1' character as part of a longer
+    // string will mess up the nice alignment that all other numbers have.
 
     // example with font size 100:
     // so, with most number chars, it's:
@@ -325,7 +387,7 @@ void draw_timer(int time_left) {
     int max_num_width = MeasureText("00", number_font_size);
     int max_word_width = MeasureText("seconds", word_font_size);
 
-    int number_base_x = (screen_width / 2) - ((max_word_width + max_num_width + 20) / 2);
+    int number_base_x = (SCREEN_WIDTH / 2) - ((max_word_width + max_num_width + 20) / 2);
     int number_base_y = 60;
 
     // grey transparency (? i'm not sure if i ought to keep this)
@@ -365,7 +427,8 @@ void draw_timer(int time_left) {
     }
 
     // seconds
-    // DrawText(sec_str.c_str(), number_base_x, number_base_y + number_font_size, number_font_size,
+    // DrawText(sec_str.c_str(), number_base_x, number_base_y + number_font_size,
+    // number_font_size,
     //          ACCENT);
     if (seconds_tens_place == "1") {
         DrawText(seconds_tens_place.c_str(),
@@ -415,24 +478,44 @@ void draw_header(Phase phase, int pomodoro_nr) {
     int font_size = 30;
     int text_width = MeasureText(text.c_str(), font_size);
 
-    int text_x = (screen_width * 0.5) - (text_width / 2.0);
+    int text_x = (SCREEN_WIDTH * 0.5) - (text_width / 2.0);
     int text_y = 5;
 
-    Rectangle header = {0, 0, screen_width, 40};
+    Rectangle header = {0, 0, SCREEN_WIDTH, 40};
     DrawRectangleRec(header, ACCENT);
     DrawText(text.c_str(), text_x, text_y, font_size, BG_COLOR);
 };
 
 /* TODO List
- * I'd like to store, somewhere, the number of minutes of work done. It'd be nice to have as a
- * little statistic to display.
+ * + display the # of minutes/seconds worked somewhere
  *
- * https://specifications.freedesktop.org/basedir/latest/
- * $XDG_DATA_HOME
- * "if $XDG_DATA_HOME is either not set or empty, a default equal to $HOME/.local/share should be
- * used."
+ * + improve how the data is written/read, specifically, keep track of the
+ *   number of seconds worked /in memory/ and read it in when the application starts
  *
- * + Sound that plays when you hit start/pause
+ * + get this whole thing compiling on windows, figure out the project structure for that
+ *   + really, use a better build system than just "make with one rule".
+ *     This is especially true if i want to figure out windows toast notifications
+ *
+ * + allow skipping forward/back a phase. allow resetting to Pomodoro #1 so you don't have to just
+ *   restart the application if you go away from your computer for a while.
+ *   + skipping should use song skip mechanics, "back" during a phase puts you at the start of that
+ *     phase, back again will put you in the previous phase, but "forward" will send you to the next
+ *     phase.
+ *
+ *   + also, keyboard shortcuts for these. H and L for back / forward
+ *
+ * + maybe a tray icon?
+ *
+ * + reminder to start the timer again? quite a few times now i've finished a work period, but,
+ * wanting to just finish some particular /thing/ that i'm on, kept working for a minute or two and
+ * then forgotten to take the break because the prompt to take one has already ended, i've alreaady
+ * heard the sound.
+ *
+ * + Sound that plays when you hit start/pause, and when the timer ends. Clapboard? It needs to be a
+ * /good/ sound when you hit start, and a neutral (not not good, just an indication) one when you
+ * pause, if that makes any sense. You want to hear a /satisfying/ thing when you start the timer
+ * up.
  *
  * + Proper icon for the application
+ *
  */

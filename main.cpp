@@ -42,35 +42,59 @@ void draw_timer(int time_left);
 
 class Button {
   private:
-    static vector<Button *> buttons;
+    inline static vector<Button *> buttons;
 
-    int width;
-    int height;
-
-    int x;
-    int y;
     Rectangle rect;
-
     Color body_color;
+
+    string text;
+    int font_size;
     Color text_color;
+    // when this key is pressed, treat it the same as thought the button had been clicked
+    int key_equiv;
+
+    bool pressed = false;
+    // store the temporary state of what color should be used to draw the button; we figure
+    // out what color the button should be in update(), but need it for later in draw()
+    Color next_draw_color;
 
     void update() {
         // derive what color the button should be from base color, as
         // well as from if the button is being hovered / clicked
-        Color draw_color;
         if (CheckCollisionPointRec(GetMousePosition(), this->rect)) {
             SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
 
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-                draw_color = ColorBrightness(body_color, -0.1f);
+                next_draw_color = ColorBrightness(body_color, -0.1f);
+                pressed = true;
             } else {
-                draw_color = ColorBrightness(body_color, 0.1f);
+                next_draw_color = ColorBrightness(body_color, 0.1f);
+                pressed = false;
             }
         } else {
             SetMouseCursor(MOUSE_CURSOR_DEFAULT);
-            draw_color = body_color;
+            next_draw_color = body_color;
         }
-        DrawRectangleRec(this->rect, draw_color);
+
+        if (IsKeyReleased(key_equiv)) {
+            pressed = true;
+        }
+    }
+
+    void draw() {
+        DrawRectangleRec(this->rect, next_draw_color);
+        if (text != "") {
+            // calculate the x/y the text needs to be drawn at to be centered within the button
+            int button_text_width = MeasureText(text.c_str(), font_size);
+
+            int btn_center_h = (rect.width / 2) + rect.x;
+            int btn_text_x = btn_center_h - (button_text_width / 2);
+
+            int btn_center_v = (rect.height / 2) + rect.y;
+            int btn_text_y = btn_center_v - (font_size / 2);
+
+            DrawText(text.c_str(), btn_text_x, btn_text_y, font_size, text_color);
+        }
     }
 
   public:
@@ -81,8 +105,19 @@ class Button {
         }
     }
 
-    Button(float x, float y, float width, float height) {
-        this->rect = {x, y, width, height};
+    static void draw_buttons() {
+        for (auto btn : buttons) {
+            btn->draw();
+        }
+    }
+
+    void set_text(const char *text) { this->text = text; }
+    bool is_pressed() { return pressed; }
+
+    Button(Rectangle rect, Color body_color, string text, int font_size, Color text_color,
+           int key_equiv)
+        : rect(rect), body_color(body_color), text(text), font_size(font_size),
+          text_color(text_color), key_equiv(key_equiv) {
         buttons.push_back(this);
     };
 };
@@ -128,8 +163,6 @@ int update_time_on_disk(int increment = WORK_DUR) {
 #elif defined(_WIN32)
     const char *appdata = getenv("APPDATA");
     cout << "appdata path: " << appdata << "\n";
-    return -1;
-#elif defined(__APPLE__)
     return -1;
 #else
     return -1;
@@ -189,36 +222,35 @@ int main() {
 
     int monitor_nr = GetCurrentMonitor();
     int refresh_rate = GetMonitorRefreshRate(monitor_nr);
-    cout << monitor_nr << ": " << refresh_rate << endl;
     SetTargetFPS(refresh_rate);
     //----------------------------------------------------------------------------------
 
     bool is_paused = true;
-    const int button_font_size = 50;
 
-    // Setup for the one big button
-    int button_width = 300;
-    int button_height = 80;
+    float button_width = 300;
+    float button_height = 80;
     Rectangle button = {SCREEN_WIDTH / 2.0f - button_width / 2.0f,
-                        SCREEN_HEIGHT / 2.0f - button_height / 2.0f, (float)button_width,
-                        (float)button_height};
-    button.height = 80;
-    button.y = (310) - button_height / 2.0f;
+                        SCREEN_HEIGHT / 2.0f - button_height / 2.0f, button_width, button_height};
+    Button *start_btn = new Button(button, ACCENT, "start", 50, BG_COLOR, ' ');
 
     // Initialization for the first cycle, which is work
     int pomodoro_nr = 1;
     Phase phase = WORK;
     float timer = WORK_DUR;
 
-    // Values that change loop to loop
-    Color cur_bg_color = BG_COLOR;
-    string cur_button_text;
-    Color cur_button_color = ACCENT;
-
     // Main loop
     while (!WindowShouldClose()) {
         // Update
         //----------------------------------------------------------------------------------
+
+        // button stuff --------------------
+        Button::update_buttons();
+        if (start_btn->is_pressed()) {
+            is_paused = !is_paused;
+        }
+        start_btn->set_text((is_paused) ? "start" : "pause");
+
+        // timer stuff --------------------
         float delta = GetFrameTime(); // just returns delta time in seconds
         if (!is_paused) {
             timer -= delta;
@@ -226,13 +258,11 @@ int main() {
 
         int time_left = max(0.0f, ceil(timer));
 
-        // get number of minutes and seconds from the ceiled seconds
         int mins = time_left / 60;
         int secs = time_left % 60;
         string min_str = to_string(mins);
         string sec_str = to_string(secs);
 
-        // pad with a 0 so both values are always two characters wide
         if (mins < 10) {
             min_str = "0" + min_str;
         }
@@ -279,56 +309,18 @@ int main() {
             system(command.c_str());
         }
 
-        // handle behavior related to the one button. change colors on hover/click
-        // set the correct cursor when hovering the button. also handles the behavior related to
-        // what happens when the button is pressed.
-        cur_button_color = ACCENT;
-        if (CheckCollisionPointRec(GetMousePosition(), button)) {
-            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-                // clicking
-                cur_button_color = ColorBrightness(ACCENT, -0.1f);
-            } else {
-                // hovering
-                cur_button_color = ColorBrightness(ACCENT, 0.1f);
-            }
-
-            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                is_paused = !is_paused;
-            }
-        }
-
-        if (IsKeyReleased(' ')) {
-            is_paused = !is_paused;
-        }
-        cur_button_text = (is_paused) ? ("start") : "pause";
-
         // END UPDATE SECTION
         //----------------------------------------------------------------------------------
 
         // BEGIN DRAWING
         //----------------------------------------------------------------------------------
         BeginDrawing();
-        ClearBackground(cur_bg_color);
+        ClearBackground(BG_COLOR);
+
+        Button::draw_buttons();
 
         draw_timer(time_left);
         draw_header(phase, pomodoro_nr);
-        // draw_pomodoro_nr(pomodoro_nr);
-
-        // BEGIN BUTTON STUFF ---------------------------------------------------------------
-        DrawRectangleRec(button, cur_button_color);
-
-        // center the button label within the button
-        int button_text_width = MeasureText(cur_button_text.c_str(), button_font_size);
-
-        int btn_center_h = (button.width / 2) + button.x;
-        int btn_text_x = btn_center_h - (button_text_width / 2);
-
-        int btn_center_v = (button.height / 2) + button.y;
-        int btn_text_y = btn_center_v - (button_font_size / 2);
-
-        DrawText(cur_button_text.c_str(), btn_text_x, btn_text_y, button_font_size, OFF_WHITE);
-        // END BUTTON STUFF
-        // ---------------------------------------------------------------------
 
         // set the right cursor based on if we're hovering the button
         if (CheckCollisionPointRec(GetMousePosition(), button)) {
@@ -344,7 +336,7 @@ int main() {
 
     // De-Initialization
     //--------------------------------------------------------------------------------------
-    // even if we end the phase early, stil
+    // even if we end the phase early, still record that time
     if (phase == WORK) {
         int seconds_worked = WORK_DUR - max(0.0f, ceil(timer));
         update_time_on_disk(seconds_worked);

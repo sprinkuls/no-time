@@ -147,6 +147,7 @@ class Timer {
     bool paused = true;
 
     bool phase_changed = false;
+    bool time_ran_out_ = false;
 
     // if 'forward' is true, skip the phase forward,
     // if false, skip backwards
@@ -194,6 +195,8 @@ class Timer {
 
     bool phase_just_changed() { return this->phase_changed; }
 
+    bool time_ran_out() { return this->time_ran_out_; }
+
     void update() {
         float delta = GetFrameTime();
         if (!paused) {
@@ -202,11 +205,14 @@ class Timer {
 
         if (timer < 0) {
             change_phase(true);
+            time_ran_out_ = true;
         } else {
             phase_changed = false;
+            time_ran_out_ = false;
         }
     }
 
+    // TODO: make this function less like-that
     void draw() {
         int time_left = max(0.0f, ceil(this->timer));
         int minutes = time_left / 60;
@@ -340,9 +346,6 @@ int main() {
     SetTargetFPS(refresh_rate);
     //----------------------------------------------------------------------------------
 
-    // Initialization for the first cycle, which is work
-    // float timer = WORK_DUR;
-
     // Initialization for all the buttons
     const float start_btn_width = 300;
     const float start_btn_height = 80;
@@ -359,7 +362,6 @@ int main() {
     Button *forward_btn = new Button(forward_rect, ACCENT, ">", 50, BG_COLOR, KEY_L);
     Button *backward_btn = new Button(backward_rect, ACCENT, "<", 50, BG_COLOR, KEY_H);
 
-    // and the timer
     Timer timer = Timer();
 
     // Main loop
@@ -367,7 +369,6 @@ int main() {
         // Update
         //----------------------------------------------------------------------------------
 
-        // button stuff --------------------
         Button::update_buttons();
         if (start_btn->is_pressed()) {
             timer.playpause();
@@ -377,14 +378,38 @@ int main() {
         if (forward_btn->is_pressed()) {
             timer.skip_forward();
         }
-
         if (backward_btn->is_pressed()) {
             timer.skip_back();
         }
 
         timer.update();
 
-        // END UPDATE SECTION
+        // different behavior is desirable for when the timer runs out on its own
+        // vs when the phase changes (which will happen whenever the phase is skipped)
+        if (timer.phase_just_changed()) {
+        }
+
+        if (timer.time_ran_out()) {
+            PlaySound(changeover_sound);
+
+            string message = "time for ";
+            switch (phase) {
+            case WORK:
+                message += "work!";
+                break;
+            case SHORT_BREAK:
+                message += "a short break!";
+                break;
+            case LONG_BREAK:
+                message += "a long break!";
+                break;
+            }
+
+            string command =
+                "notify-send \"" + string(APP_NAME) + "\"" + " " + "\"" + message + "\"";
+            system(command.c_str());
+        }
+
         //----------------------------------------------------------------------------------
 
         // BEGIN DRAWING
@@ -395,7 +420,6 @@ int main() {
         Button::draw_buttons();
         timer.draw();
 
-        // draw_timer(time_left);
         draw_header(phase, pomodoro_nr);
 
         EndDrawing();

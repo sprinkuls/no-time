@@ -21,7 +21,6 @@ const Color MAY_SKYBLUE = {28, 145, 228, 255};
 
 const Color BG_COLOR = OFF_WHITE;
 const Color FG_COLOR = OFF_BLACK;
-Color ACCENT = MAY_ORANGE; // non-const as the accent color changes with phase
 
 enum Phase { WORK, SHORT_BREAK, LONG_BREAK };
 
@@ -37,8 +36,16 @@ const float WORK_DUR = 20;       // 25 minutes, work
 const float SHORT_BREAK_DUR = 5; // 5  minutes, short break
 const float LONG_BREAK_DUR = 15; // 15 minutes, short break
 
+// non-const globals.
+// i figured that these are, in fact, just things that the whole application should know about.
+// like, since this is a pomodoro timer, there's not really any risk of things like "which pomodoro
+// cycle are we on?" being traded out for some other implementation
+int pomodoro_nr = 1;
+Phase phase = WORK;
+Color ACCENT = MAY_ORANGE; // non-const as the accent color changes with phase
+
 void draw_header(Phase phase, int pomodoro_nr);
-void draw_timer(int time_left);
+int update_time_on_disk(int increment = WORK_DUR);
 
 class Button {
   private:
@@ -134,6 +141,180 @@ class Button {
     };
 };
 
+class Timer {
+  private:
+    float timer = WORK_DUR;
+    bool paused = true;
+
+    bool phase_changed = false;
+
+    // if 'forward' is true, skip the phase forward,
+    // if false, skip backwards
+    void change_phase(bool forward) {
+        phase_changed = true;
+        paused = true;
+
+        if (phase == WORK) {
+
+            if (!forward) {
+                pomodoro_nr--;
+            }
+
+            if ((pomodoro_nr % 4) == 0) {
+                phase = LONG_BREAK;
+                timer = LONG_BREAK_DUR;
+            } else {
+                phase = SHORT_BREAK;
+                timer = SHORT_BREAK_DUR;
+            }
+
+        } else {
+            phase = WORK;
+            timer = WORK_DUR;
+
+            if (forward) {
+                pomodoro_nr++;
+            }
+        }
+    }
+
+  public:
+    void skip_forward() { change_phase(true); }
+
+    void skip_back() {
+        // prevent skipping back to nonpositive pomodoro numbers
+        if (!(pomodoro_nr == 1 && phase == WORK)) {
+            change_phase(false);
+        }
+    }
+
+    void playpause() { this->paused = !this->paused; }
+
+    bool is_paused() { return this->paused; }
+
+    bool phase_just_changed() { return this->phase_changed; }
+
+    void update() {
+        float delta = GetFrameTime();
+        if (!paused) {
+            timer -= delta;
+        }
+
+        if (timer < 0) {
+            change_phase(true);
+        } else {
+            phase_changed = false;
+        }
+    }
+
+    void draw() {
+        int time_left = max(0.0f, ceil(this->timer));
+        int minutes = time_left / 60;
+        int seconds = time_left % 60;
+        string min_str = to_string(minutes);
+        string sec_str = to_string(seconds);
+
+        string minutes_tens_place = to_string(minutes / 10);
+        string minutes_ones_place = to_string(minutes % 10);
+
+        string seconds_tens_place = to_string(seconds / 10);
+        string seconds_ones_place = to_string(seconds % 10);
+
+        int number_font_size = 100;
+        int word_font_size = number_font_size * 0.6;
+
+        // in the default font, each number character (besides 1) is (font_size / 2) px wide,
+        // and will have (font_size / 10) px space between them. the '1' character, however, is
+        // far slimmer (font_size / 5), and so simply drawing the '1' character as part of a
+        // longer string will mess up the nice alignment that all other numbers have.
+
+        // example with font size 100:
+        // so, with most number chars, it's:
+        // 50px - 10px - 50px
+        // number, space between chars, number
+        // but if we have a one in the tens place, it needs to be:
+        // 30px - 20px - 10px - 50px
+        // padding, '1', space between chars, number
+
+        int max_num_width = MeasureText("00", number_font_size);
+        int max_word_width = MeasureText("seconds", word_font_size);
+
+        int number_base_x = (SCREEN_WIDTH / 2) - ((max_word_width + max_num_width + 20) / 2);
+        int number_base_y = 60;
+
+        // grey transparency (? i'm not sure if i ought to keep this)
+        DrawText("00", number_base_x, number_base_y, number_font_size, OFF_GREY);
+        DrawText("00", number_base_x, number_base_y + number_font_size, number_font_size, OFF_GREY);
+
+        // minutes
+        if (minutes_tens_place == "1") {
+            DrawText(minutes_tens_place.c_str(),
+                     number_base_x + (number_font_size / 2) - (number_font_size / 5), number_base_y,
+                     number_font_size, ACCENT);
+        } else if (minutes_tens_place == "0") {
+            // don't draw the leading zero
+        } else {
+            DrawText(minutes_tens_place.c_str(), number_base_x, number_base_y, number_font_size,
+                     ACCENT);
+        }
+
+        if (minutes_ones_place == "1") {
+            DrawText(minutes_ones_place.c_str(),
+                     (number_base_x + (number_font_size / 2)) +
+                         ((number_font_size / 2) - (number_font_size / 5)) +
+                         (number_font_size / 10),
+                     number_base_y, number_font_size, ACCENT);
+
+        } else {
+            DrawText(minutes_ones_place.c_str(),
+                     number_base_x + (number_font_size / 2) + (number_font_size / 10),
+                     number_base_y, number_font_size, ACCENT);
+        }
+
+        if (minutes == 1) {
+            DrawText("minute", (number_base_x + max_num_width) + (20), number_base_y + (33),
+                     word_font_size, OFF_BLACK);
+        } else {
+            DrawText("minutes", (number_base_x + max_num_width) + (20), number_base_y + (33),
+                     word_font_size, OFF_BLACK);
+        }
+
+        // seconds
+        // DrawText(sec_str.c_str(), number_base_x, number_base_y + number_font_size,
+        // number_font_size,
+        //          ACCENT);
+        if (seconds_tens_place == "1") {
+            DrawText(seconds_tens_place.c_str(),
+                     number_base_x + (number_font_size / 2) - (number_font_size / 5),
+                     number_base_y + number_font_size, number_font_size, ACCENT);
+        } else if (seconds_tens_place == "0") {
+            // don't draw the leading zero
+        } else {
+            DrawText(seconds_tens_place.c_str(), number_base_x, number_base_y + number_font_size,
+                     number_font_size, ACCENT);
+        }
+
+        if (seconds_ones_place == "1") {
+            DrawText(seconds_ones_place.c_str(),
+                     (number_base_x + (number_font_size / 2)) +
+                         ((number_font_size / 2) - (number_font_size / 5)) +
+                         (number_font_size / 10),
+                     number_base_y + number_font_size, number_font_size, ACCENT);
+        } else {
+            DrawText(seconds_ones_place.c_str(),
+                     number_base_x + (number_font_size / 2) + (number_font_size / 10),
+                     number_base_y + number_font_size, number_font_size, ACCENT);
+        }
+        if (seconds == 1) {
+            DrawText("second", number_base_x + max_num_width + 20,
+                     number_base_y + number_font_size + 33, word_font_size, FG_COLOR);
+        } else {
+            DrawText("seconds", number_base_x + max_num_width + 20,
+                     number_base_y + number_font_size + 33, word_font_size, FG_COLOR);
+        }
+    }
+};
+
 // TODO: this
 void notify() {
 #if defined(__linux__)
@@ -145,10 +326,128 @@ void notify() {
 #endif
 }
 
+int main() {
+    // Raylib Initialization -----------------------------------------------------------
+
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, APP_NAME);
+    SetExitKey(KEY_NULL); // prevent ESC from closing the window
+
+    InitAudioDevice();
+    Sound changeover_sound = LoadSound("explosion_good.wav");
+
+    int monitor_nr = GetCurrentMonitor();
+    int refresh_rate = GetMonitorRefreshRate(monitor_nr);
+    SetTargetFPS(refresh_rate);
+    //----------------------------------------------------------------------------------
+
+    // Initialization for the first cycle, which is work
+    // float timer = WORK_DUR;
+
+    // Initialization for all the buttons
+    const float start_btn_width = 300;
+    const float start_btn_height = 80;
+    Rectangle start_btn_rect = {SCREEN_WIDTH / 2.0f - start_btn_width / 2.0f,
+                                310 - start_btn_height / 2.0f, start_btn_width, start_btn_height};
+    Button *start_btn = new Button(start_btn_rect, ACCENT, "start", 50, BG_COLOR, KEY_SPACE);
+
+    const float seek_btn_side = 80;
+    const float seek_padding = 20;
+    Rectangle backward_rect = {start_btn_rect.x - seek_btn_side - seek_padding, start_btn_rect.y,
+                               seek_btn_side, seek_btn_side};
+    Rectangle forward_rect = {start_btn_rect.x + start_btn_rect.width + seek_padding,
+                              start_btn_rect.y, seek_btn_side, seek_btn_side};
+    Button *forward_btn = new Button(forward_rect, ACCENT, ">", 50, BG_COLOR, KEY_L);
+    Button *backward_btn = new Button(backward_rect, ACCENT, "<", 50, BG_COLOR, KEY_H);
+
+    // and the timer
+    Timer timer = Timer();
+
+    // Main loop
+    while (!WindowShouldClose()) {
+        // Update
+        //----------------------------------------------------------------------------------
+
+        // button stuff --------------------
+        Button::update_buttons();
+        if (start_btn->is_pressed()) {
+            timer.playpause();
+            start_btn->set_text((timer.is_paused()) ? "start" : "pause");
+        }
+
+        if (forward_btn->is_pressed()) {
+            timer.skip_forward();
+        }
+
+        if (backward_btn->is_pressed()) {
+            timer.skip_back();
+        }
+
+        timer.update();
+
+        // END UPDATE SECTION
+        //----------------------------------------------------------------------------------
+
+        // BEGIN DRAWING
+        //----------------------------------------------------------------------------------
+        BeginDrawing();
+        ClearBackground(BG_COLOR);
+
+        Button::draw_buttons();
+        timer.draw();
+
+        // draw_timer(time_left);
+        draw_header(phase, pomodoro_nr);
+
+        EndDrawing();
+        // END DRAWING
+        //----------------------------------------------------------------------------------
+    }
+
+    // De-Initialization
+    //--------------------------------------------------------------------------------------
+    // even if we end the phase early, still record that time
+    // TODO: update this here, probably add a "get time left" on timer or something
+    if (phase == WORK) {
+        // int seconds_worked = WORK_DUR - max(0.0f, ceil(timer));
+        // update_time_on_disk(seconds_worked);
+    }
+
+    UnloadSound(changeover_sound);
+    CloseAudioDevice();
+    CloseWindow(); // Close window and OpenGL context
+    //--------------------------------------------------------------------------------------
+}
+
+void draw_header(Phase phase, int pomodoro_nr) {
+    string text = "pomodoro #" + to_string(pomodoro_nr) + " - ";
+
+    switch (phase) {
+    case WORK:
+        text += "work";
+        break;
+    case SHORT_BREAK:
+        text += "short break";
+        break;
+    case LONG_BREAK:
+        text += "long break";
+        break;
+    }
+
+    int font_size = 30;
+    int text_width = MeasureText(text.c_str(), font_size);
+
+    int text_x = (SCREEN_WIDTH * 0.5) - (text_width / 2.0);
+    int text_y = 5;
+
+    Rectangle header = {0, 0, SCREEN_WIDTH, 40};
+    DrawRectangleRec(header, ACCENT);
+    DrawText(text.c_str(), text_x, text_y, font_size, BG_COLOR);
+};
+
 // store the amount of working time that's been tracked by tomayto.
 // returns the number of SECONDS that have been spent working,
 // or -1 on failure of some sort
-int update_time_on_disk(int increment = WORK_DUR) {
+int update_time_on_disk(int increment) {
     fs::path base_path;
 
 #if defined(__linux__)
@@ -223,349 +522,6 @@ int update_time_on_disk(int increment = WORK_DUR) {
     return -1;
 }
 
-int main() {
-    // Raylib Initialization -----------------------------------------------------------
-
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, APP_NAME);
-    SetExitKey(KEY_NULL); // prevent ESC from closing the window
-
-    InitAudioDevice();
-    Sound changeover_sound = LoadSound("explosion_good.wav");
-
-    int monitor_nr = GetCurrentMonitor();
-    int refresh_rate = GetMonitorRefreshRate(monitor_nr);
-    SetTargetFPS(refresh_rate);
-    //----------------------------------------------------------------------------------
-
-    // Initialization for the first cycle, which is work
-    bool is_paused = true;
-    int pomodoro_nr = 1;
-    Phase phase = WORK;
-    float timer = WORK_DUR;
-
-    // Initialization for all the buttons
-    const float start_btn_width = 300;
-    const float start_btn_height = 80;
-    Rectangle start_btn_rect = {SCREEN_WIDTH / 2.0f - start_btn_width / 2.0f,
-                                310 - start_btn_height / 2.0f, start_btn_width, start_btn_height};
-    Button *start_btn = new Button(start_btn_rect, ACCENT, "start", 50, BG_COLOR, ' ');
-
-    const float seek_btn_side = 80;
-    const float seek_padding = 20;
-    Rectangle backward_rect = {start_btn_rect.x - seek_btn_side - seek_padding, start_btn_rect.y,
-                               seek_btn_side, seek_btn_side};
-    Rectangle forward_rect = {start_btn_rect.x + start_btn_rect.width + seek_padding,
-                              start_btn_rect.y, seek_btn_side, seek_btn_side};
-    Button *forward_btn = new Button(forward_rect, ACCENT, ">", 50, BG_COLOR, 'l');
-    Button *backward_btn = new Button(backward_rect, ACCENT, "<", 50, BG_COLOR, 'h');
-
-    // Main loop
-    while (!WindowShouldClose()) {
-        // Update
-        //----------------------------------------------------------------------------------
-
-        // button stuff --------------------
-        Button::update_buttons();
-        if (start_btn->is_pressed()) {
-            is_paused = !is_paused;
-        }
-
-        // TODO: probably move all the timer logic into a class or something so there isn't
-        // all this logic doing the same thing everywhere
-        if (forward_btn->is_pressed()) {
-            if (phase == WORK) {
-                update_time_on_disk();
-
-                if ((pomodoro_nr % 4) == 0) {
-                    phase = LONG_BREAK;
-                    timer = LONG_BREAK_DUR;
-                    ACCENT = MAY_PURPLE;
-                    start_btn->set_body_color(ACCENT);
-                    forward_btn->set_body_color(ACCENT);
-                    backward_btn->set_body_color(ACCENT);
-                } else {
-                    phase = SHORT_BREAK;
-                    timer = SHORT_BREAK_DUR;
-                    ACCENT = MAY_MAGENTA;
-                    start_btn->set_body_color(ACCENT);
-                    forward_btn->set_body_color(ACCENT);
-                    backward_btn->set_body_color(ACCENT);
-                }
-            } else {
-                phase = WORK;
-                timer = WORK_DUR;
-                ACCENT = MAY_ORANGE;
-                start_btn->set_body_color(ACCENT);
-                forward_btn->set_body_color(ACCENT);
-                backward_btn->set_body_color(ACCENT);
-                pomodoro_nr++;
-            }
-        }
-
-        if (backward_btn->is_pressed()) {
-            if (phase == WORK) {
-                update_time_on_disk();
-
-                // minus 1, essentially saying "if the last pomodoro had a long break, then we need
-                // to go to a long break"
-                if (((pomodoro_nr - 1) % 4) == 0) {
-                    phase = LONG_BREAK;
-                    timer = LONG_BREAK_DUR;
-                    ACCENT = MAY_PURPLE;
-                    start_btn->set_body_color(ACCENT);
-                    forward_btn->set_body_color(ACCENT);
-                    backward_btn->set_body_color(ACCENT);
-                } else {
-                    phase = SHORT_BREAK;
-                    timer = SHORT_BREAK_DUR;
-                    ACCENT = MAY_MAGENTA;
-                    start_btn->set_body_color(ACCENT);
-                    forward_btn->set_body_color(ACCENT);
-                    backward_btn->set_body_color(ACCENT);
-                }
-                pomodoro_nr--;
-            } else {
-                phase = WORK;
-                timer = WORK_DUR;
-                ACCENT = MAY_ORANGE;
-                start_btn->set_body_color(ACCENT);
-                forward_btn->set_body_color(ACCENT);
-                backward_btn->set_body_color(ACCENT);
-            }
-        }
-
-        // timer stuff --------------------
-        float delta = GetFrameTime();
-        if (!is_paused) {
-            timer -= delta;
-        }
-
-        int time_left = max(0.0f, ceil(timer));
-
-        int mins = time_left / 60;
-        int secs = time_left % 60;
-        string min_str = to_string(mins);
-        string sec_str = to_string(secs);
-
-        if (mins < 10) {
-            min_str = "0" + min_str;
-        }
-        if (secs < 10) {
-            sec_str = "0" + sec_str;
-        }
-        string timer_display_text = min_str + ":" + sec_str;
-
-        // change states, reset timer
-        if (time_left == 0) {
-            PlaySound(changeover_sound);
-            is_paused = true;
-            string message = "time for ";
-
-            if (phase == WORK) {
-                int seconds_working = update_time_on_disk();
-                if (seconds_working != -1)
-                    cout << "wow! you've spent " << (int)(seconds_working / 60) << "minutes and "
-                         << (int)(seconds_working % 60) << "seconds working!"
-                         << "we're all so proud\n";
-
-                if ((pomodoro_nr % 4) == 0) {
-                    message += "a long break!";
-                    phase = LONG_BREAK;
-                    timer = LONG_BREAK_DUR;
-                    ACCENT = MAY_PURPLE;
-                    start_btn->set_body_color(ACCENT);
-                    forward_btn->set_body_color(ACCENT);
-                    backward_btn->set_body_color(ACCENT);
-                } else {
-                    message += "a break!";
-                    phase = SHORT_BREAK;
-                    timer = SHORT_BREAK_DUR;
-                    ACCENT = MAY_MAGENTA;
-                    start_btn->set_body_color(ACCENT);
-                    forward_btn->set_body_color(ACCENT);
-                    backward_btn->set_body_color(ACCENT);
-                }
-            } else {
-                message += "work!";
-                phase = WORK;
-                timer = WORK_DUR;
-                ACCENT = MAY_ORANGE;
-                start_btn->set_body_color(ACCENT);
-                forward_btn->set_body_color(ACCENT);
-                backward_btn->set_body_color(ACCENT);
-                pomodoro_nr++;
-            }
-
-            // TODO: this is a hack to send a notification on linux, i'm sure there's a better
-            // or more general way to do this though
-            string command =
-                "notify-send \"" + string(APP_NAME) + "\"" + " " + "\"" + message + "\"";
-            system(command.c_str());
-        }
-
-        // END UPDATE SECTION
-        //----------------------------------------------------------------------------------
-
-        // BEGIN DRAWING
-        //----------------------------------------------------------------------------------
-        BeginDrawing();
-        ClearBackground(BG_COLOR);
-
-        start_btn->set_text((is_paused) ? "start" : "pause");
-        Button::draw_buttons();
-
-        draw_timer(time_left);
-        draw_header(phase, pomodoro_nr);
-
-        EndDrawing();
-        // END DRAWING
-        //----------------------------------------------------------------------------------
-    }
-
-    // De-Initialization
-    //--------------------------------------------------------------------------------------
-    // even if we end the phase early, still record that time
-    if (phase == WORK) {
-        int seconds_worked = WORK_DUR - max(0.0f, ceil(timer));
-        update_time_on_disk(seconds_worked);
-    }
-
-    UnloadSound(changeover_sound);
-    CloseAudioDevice();
-    CloseWindow(); // Close window and OpenGL context
-    //--------------------------------------------------------------------------------------
-}
-
-void draw_timer(int time_left) {
-    int minutes = time_left / 60;
-    int seconds = time_left % 60;
-    string min_str = to_string(minutes);
-    string sec_str = to_string(seconds);
-
-    string minutes_tens_place = to_string(minutes / 10);
-    string minutes_ones_place = to_string(minutes % 10);
-
-    string seconds_tens_place = to_string(seconds / 10);
-    string seconds_ones_place = to_string(seconds % 10);
-
-    int number_font_size = 100;
-    int word_font_size = number_font_size * 0.6;
-
-    // in the default font, each number character (besides 1) is (font_size / 2) px wide, and
-    // will have (font_size / 10) px space between them. the '1' character, however, is far
-    // slimmer (font_size / 5), and so simply drawing the '1' character as part of a longer
-    // string will mess up the nice alignment that all other numbers have.
-
-    // example with font size 100:
-    // so, with most number chars, it's:
-    // 50px - 10px - 50px
-    // number, space between chars, number
-    // but if we have a one in the tens place, it needs to be:
-    // 30px - 20px - 10px - 50px
-    // padding, '1', space between chars, number
-
-    int max_num_width = MeasureText("00", number_font_size);
-    int max_word_width = MeasureText("seconds", word_font_size);
-
-    int number_base_x = (SCREEN_WIDTH / 2) - ((max_word_width + max_num_width + 20) / 2);
-    int number_base_y = 60;
-
-    // grey transparency (? i'm not sure if i ought to keep this)
-    DrawText("00", number_base_x, number_base_y, number_font_size, OFF_GREY);
-    DrawText("00", number_base_x, number_base_y + number_font_size, number_font_size, OFF_GREY);
-
-    // minutes
-    if (minutes_tens_place == "1") {
-        DrawText(minutes_tens_place.c_str(),
-                 number_base_x + (number_font_size / 2) - (number_font_size / 5), number_base_y,
-                 number_font_size, ACCENT);
-    } else if (minutes_tens_place == "0") {
-        // don't draw the leading zero
-    } else {
-        DrawText(minutes_tens_place.c_str(), number_base_x, number_base_y, number_font_size,
-                 ACCENT);
-    }
-
-    if (minutes_ones_place == "1") {
-        DrawText(minutes_ones_place.c_str(),
-                 (number_base_x + (number_font_size / 2)) +
-                     ((number_font_size / 2) - (number_font_size / 5)) + (number_font_size / 10),
-                 number_base_y, number_font_size, ACCENT);
-
-    } else {
-        DrawText(minutes_ones_place.c_str(),
-                 number_base_x + (number_font_size / 2) + (number_font_size / 10), number_base_y,
-                 number_font_size, ACCENT);
-    }
-
-    if (minutes == 1) {
-        DrawText("minute", (number_base_x + max_num_width) + (20), number_base_y + (33),
-                 word_font_size, OFF_BLACK);
-    } else {
-        DrawText("minutes", (number_base_x + max_num_width) + (20), number_base_y + (33),
-                 word_font_size, OFF_BLACK);
-    }
-
-    // seconds
-    // DrawText(sec_str.c_str(), number_base_x, number_base_y + number_font_size,
-    // number_font_size,
-    //          ACCENT);
-    if (seconds_tens_place == "1") {
-        DrawText(seconds_tens_place.c_str(),
-                 number_base_x + (number_font_size / 2) - (number_font_size / 5),
-                 number_base_y + number_font_size, number_font_size, ACCENT);
-    } else if (seconds_tens_place == "0") {
-        // don't draw the leading zero
-    } else {
-        DrawText(seconds_tens_place.c_str(), number_base_x, number_base_y + number_font_size,
-                 number_font_size, ACCENT);
-    }
-
-    if (seconds_ones_place == "1") {
-        DrawText(seconds_ones_place.c_str(),
-                 (number_base_x + (number_font_size / 2)) +
-                     ((number_font_size / 2) - (number_font_size / 5)) + (number_font_size / 10),
-                 number_base_y + number_font_size, number_font_size, ACCENT);
-    } else {
-        DrawText(seconds_ones_place.c_str(),
-                 number_base_x + (number_font_size / 2) + (number_font_size / 10),
-                 number_base_y + number_font_size, number_font_size, ACCENT);
-    }
-    if (seconds == 1) {
-        DrawText("second", number_base_x + max_num_width + 20,
-                 number_base_y + number_font_size + 33, word_font_size, FG_COLOR);
-    } else {
-        DrawText("seconds", number_base_x + max_num_width + 20,
-                 number_base_y + number_font_size + 33, word_font_size, FG_COLOR);
-    }
-}
-
-void draw_header(Phase phase, int pomodoro_nr) {
-    string text = "pomodoro #" + to_string(pomodoro_nr) + " - ";
-
-    switch (phase) {
-    case WORK:
-        text += "work";
-        break;
-    case SHORT_BREAK:
-        text += "short break";
-        break;
-    case LONG_BREAK:
-        text += "long break";
-        break;
-    }
-
-    int font_size = 30;
-    int text_width = MeasureText(text.c_str(), font_size);
-
-    int text_x = (SCREEN_WIDTH * 0.5) - (text_width / 2.0);
-    int text_y = 5;
-
-    Rectangle header = {0, 0, SCREEN_WIDTH, 40};
-    DrawRectangleRec(header, ACCENT);
-    DrawText(text.c_str(), text_x, text_y, font_size, BG_COLOR);
-};
-
 /* TODO List
  * + display the # of minutes/seconds worked somewhere
  *
@@ -576,25 +532,25 @@ void draw_header(Phase phase, int pomodoro_nr) {
  *   + really, use a better build system than just "make with one rule".
  *     This is especially true if i want to figure out windows toast notifications
  *
- * + allow skipping forward/back a phase. allow resetting to Pomodoro #1 so you don't have to just
- *   restart the application if you go away from your computer for a while.
- *   + skipping should use song skip mechanics, "back" during a phase puts you at the start of that
- *     phase, back again will put you in the previous phase, but "forward" will send you to the next
- *     phase.
+ * + allow skipping forward/back a phase. allow resetting to Pomodoro #1 so you don't have to
+ * just restart the application if you go away from your computer for a while.
+ *   + skipping should use song skip mechanics, "back" during a phase puts you at the start of
+ * that phase, back again will put you in the previous phase, but "forward" will send you to the
+ * next phase.
  *
  *   + also, keyboard shortcuts for these. H and L for back / forward
  *
  * + maybe a tray icon?
  *
  * + reminder to start the timer again? quite a few times now i've finished a work period, but,
- * wanting to just finish some particular /thing/ that i'm on, kept working for a minute or two and
- * then forgotten to take the break because the prompt to take one has already ended, i've alreaady
- * heard the sound.
+ * wanting to just finish some particular /thing/ that i'm on, kept working for a minute or two
+ * and then forgotten to take the break because the prompt to take one has already ended, i've
+ * alreaady heard the sound.
  *
- * + Sound that plays when you hit start/pause, and when the timer ends. Clapboard? It needs to be a
- * /good/ sound when you hit start, and a neutral (not not good, just an indication) one when you
- * pause, if that makes any sense. You want to hear a /satisfying/ thing when you start the timer
- * up.
+ * + Sound that plays when you hit start/pause, and when the timer ends. Clapboard? It needs to
+ * be a /good/ sound when you hit start, and a neutral (not not good, just an indication) one
+ * when you pause, if that makes any sense. You want to hear a /satisfying/ thing when you start
+ * the timer up.
  *
  * + Proper icon for the application
  *

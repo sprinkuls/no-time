@@ -29,13 +29,13 @@ const char *APP_NAME = "Tomayto";
 const int SCREEN_WIDTH = 600;
 const int SCREEN_HEIGHT = 380;
 
-const float WORK_DUR = 25 * 60;       // 25 minutes, work
-const float SHORT_BREAK_DUR = 5 * 60; // 5  minutes, short break
-const float LONG_BREAK_DUR = 15 * 60; // 15 minutes, short break
+// const float WORK_DUR = 25 * 60;       // 25 minutes, work
+// const float SHORT_BREAK_DUR = 5 * 60; // 5  minutes, short break
+// const float LONG_BREAK_DUR = 15 * 60; // 15 minutes, short break
 // short testing values:
-// const float work_dur = 61;
-// const float short_break_dur = 1;
-// const float long_break_dur = 2;
+const float WORK_DUR = 20;       // 25 minutes, work
+const float SHORT_BREAK_DUR = 5; // 5  minutes, short break
+const float LONG_BREAK_DUR = 15; // 15 minutes, short break
 
 void draw_header(Phase phase, int pomodoro_nr);
 void draw_timer(int time_left);
@@ -50,6 +50,7 @@ class Button {
     string text;
     int font_size;
     Color text_color;
+
     // when this key is pressed, treat it the same as thought the button had been clicked
     int key_equiv;
 
@@ -64,9 +65,6 @@ class Button {
         // (difference between saying the button is constantly flipping back/forth every frame
         // the user happens to hold a button down for vs toggling it once)
         pressed = false;
-        if (IsKeyReleased(key_equiv)) {
-            pressed = true;
-        }
 
         // derive what color the button should be from base color, as
         // well as from if the button is being hovered / clicked
@@ -83,6 +81,13 @@ class Button {
             }
         } else {
             next_draw_color = body_color;
+        }
+
+        if (IsKeyDown(key_equiv)) {
+            next_draw_color = ColorBrightness(body_color, -0.1f);
+        }
+        if (IsKeyReleased(key_equiv)) {
+            pressed = true;
         }
     }
 
@@ -104,7 +109,7 @@ class Button {
 
   public:
     static void update_buttons() {
-        // reset mouse cursor; if /any/ button is being pressed, it will be changed
+        // reset mouse cursor as if any button is being pressed, it will be changed
         SetMouseCursor(MOUSE_CURSOR_DEFAULT);
         for (auto btn : buttons) {
             btn->update();
@@ -118,6 +123,7 @@ class Button {
     }
 
     void set_text(const char *text) { this->text = text; }
+    void set_body_color(Color body_color) { this->body_color = body_color; }
     bool is_pressed() { return pressed; }
 
     Button(Rectangle rect, Color body_color, string text, int font_size, Color text_color,
@@ -263,10 +269,73 @@ int main() {
         if (start_btn->is_pressed()) {
             is_paused = !is_paused;
         }
-        start_btn->set_text((is_paused) ? "start" : "pause");
+
+        // TODO: probably move all the timer logic into a class or something so there isn't
+        // all this logic doing the same thing everywhere
+        if (forward_btn->is_pressed()) {
+            if (phase == WORK) {
+                update_time_on_disk();
+
+                if ((pomodoro_nr % 4) == 0) {
+                    phase = LONG_BREAK;
+                    timer = LONG_BREAK_DUR;
+                    ACCENT = MAY_PURPLE;
+                    start_btn->set_body_color(ACCENT);
+                    forward_btn->set_body_color(ACCENT);
+                    backward_btn->set_body_color(ACCENT);
+                } else {
+                    phase = SHORT_BREAK;
+                    timer = SHORT_BREAK_DUR;
+                    ACCENT = MAY_MAGENTA;
+                    start_btn->set_body_color(ACCENT);
+                    forward_btn->set_body_color(ACCENT);
+                    backward_btn->set_body_color(ACCENT);
+                }
+            } else {
+                phase = WORK;
+                timer = WORK_DUR;
+                ACCENT = MAY_ORANGE;
+                start_btn->set_body_color(ACCENT);
+                forward_btn->set_body_color(ACCENT);
+                backward_btn->set_body_color(ACCENT);
+                pomodoro_nr++;
+            }
+        }
+
+        if (backward_btn->is_pressed()) {
+            if (phase == WORK) {
+                update_time_on_disk();
+
+                // minus 1, essentially saying "if the last pomodoro had a long break, then we need
+                // to go to a long break"
+                if (((pomodoro_nr - 1) % 4) == 0) {
+                    phase = LONG_BREAK;
+                    timer = LONG_BREAK_DUR;
+                    ACCENT = MAY_PURPLE;
+                    start_btn->set_body_color(ACCENT);
+                    forward_btn->set_body_color(ACCENT);
+                    backward_btn->set_body_color(ACCENT);
+                } else {
+                    phase = SHORT_BREAK;
+                    timer = SHORT_BREAK_DUR;
+                    ACCENT = MAY_MAGENTA;
+                    start_btn->set_body_color(ACCENT);
+                    forward_btn->set_body_color(ACCENT);
+                    backward_btn->set_body_color(ACCENT);
+                }
+                pomodoro_nr--;
+            } else {
+                phase = WORK;
+                timer = WORK_DUR;
+                ACCENT = MAY_ORANGE;
+                start_btn->set_body_color(ACCENT);
+                forward_btn->set_body_color(ACCENT);
+                backward_btn->set_body_color(ACCENT);
+            }
+        }
 
         // timer stuff --------------------
-        float delta = GetFrameTime(); // just returns delta time in seconds
+        float delta = GetFrameTime();
         if (!is_paused) {
             timer -= delta;
         }
@@ -290,7 +359,6 @@ int main() {
         if (time_left == 0) {
             PlaySound(changeover_sound);
             is_paused = true;
-            string title = APP_NAME;
             string message = "time for ";
 
             if (phase == WORK) {
@@ -299,28 +367,39 @@ int main() {
                     cout << "wow! you've spent " << (int)(seconds_working / 60) << "minutes and "
                          << (int)(seconds_working % 60) << "seconds working!"
                          << "we're all so proud\n";
+
                 if ((pomodoro_nr % 4) == 0) {
                     message += "a long break!";
                     phase = LONG_BREAK;
                     timer = LONG_BREAK_DUR;
                     ACCENT = MAY_PURPLE;
+                    start_btn->set_body_color(ACCENT);
+                    forward_btn->set_body_color(ACCENT);
+                    backward_btn->set_body_color(ACCENT);
                 } else {
                     message += "a break!";
                     phase = SHORT_BREAK;
                     timer = SHORT_BREAK_DUR;
                     ACCENT = MAY_MAGENTA;
+                    start_btn->set_body_color(ACCENT);
+                    forward_btn->set_body_color(ACCENT);
+                    backward_btn->set_body_color(ACCENT);
                 }
             } else {
                 message += "work!";
                 phase = WORK;
                 timer = WORK_DUR;
                 ACCENT = MAY_ORANGE;
+                start_btn->set_body_color(ACCENT);
+                forward_btn->set_body_color(ACCENT);
+                backward_btn->set_body_color(ACCENT);
                 pomodoro_nr++;
             }
 
             // TODO: this is a hack to send a notification on linux, i'm sure there's a better
             // or more general way to do this though
-            string command = "notify-send \"" + title + "\"" + " " + "\"" + message + "\"";
+            string command =
+                "notify-send \"" + string(APP_NAME) + "\"" + " " + "\"" + message + "\"";
             system(command.c_str());
         }
 
@@ -332,6 +411,7 @@ int main() {
         BeginDrawing();
         ClearBackground(BG_COLOR);
 
+        start_btn->set_text((is_paused) ? "start" : "pause");
         Button::draw_buttons();
 
         draw_timer(time_left);

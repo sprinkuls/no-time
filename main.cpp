@@ -59,6 +59,15 @@ class Button {
     Color next_draw_color;
 
     void update() {
+        // press events need to be run on release rather than press, because press events will keep
+        // happening frame after frame, while release events only run once
+        // (difference between saying the button is constantly flipping back/forth every frame
+        // the user happens to hold a button down for vs toggling it once)
+        pressed = false;
+        if (IsKeyReleased(key_equiv)) {
+            pressed = true;
+        }
+
         // derive what color the button should be from base color, as
         // well as from if the button is being hovered / clicked
         if (CheckCollisionPointRec(GetMousePosition(), this->rect)) {
@@ -66,18 +75,14 @@ class Button {
 
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
                 next_draw_color = ColorBrightness(body_color, -0.1f);
-                pressed = true;
             } else {
                 next_draw_color = ColorBrightness(body_color, 0.1f);
-                pressed = false;
+            }
+            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                pressed = true;
             }
         } else {
-            SetMouseCursor(MOUSE_CURSOR_DEFAULT);
             next_draw_color = body_color;
-        }
-
-        if (IsKeyReleased(key_equiv)) {
-            pressed = true;
         }
     }
 
@@ -99,6 +104,7 @@ class Button {
 
   public:
     static void update_buttons() {
+        // reset mouse cursor; if /any/ button is being pressed, it will be changed
         SetMouseCursor(MOUSE_CURSOR_DEFAULT);
         for (auto btn : buttons) {
             btn->update();
@@ -225,18 +231,27 @@ int main() {
     SetTargetFPS(refresh_rate);
     //----------------------------------------------------------------------------------
 
-    bool is_paused = true;
-
-    float button_width = 300;
-    float button_height = 80;
-    Rectangle button = {SCREEN_WIDTH / 2.0f - button_width / 2.0f,
-                        SCREEN_HEIGHT / 2.0f - button_height / 2.0f, button_width, button_height};
-    Button *start_btn = new Button(button, ACCENT, "start", 50, BG_COLOR, ' ');
-
     // Initialization for the first cycle, which is work
+    bool is_paused = true;
     int pomodoro_nr = 1;
     Phase phase = WORK;
     float timer = WORK_DUR;
+
+    // Initialization for all the buttons
+    const float start_btn_width = 300;
+    const float start_btn_height = 80;
+    Rectangle start_btn_rect = {SCREEN_WIDTH / 2.0f - start_btn_width / 2.0f,
+                                310 - start_btn_height / 2.0f, start_btn_width, start_btn_height};
+    Button *start_btn = new Button(start_btn_rect, ACCENT, "start", 50, BG_COLOR, ' ');
+
+    const float seek_btn_side = 80;
+    const float seek_padding = 20;
+    Rectangle backward_rect = {start_btn_rect.x - seek_btn_side - seek_padding, start_btn_rect.y,
+                               seek_btn_side, seek_btn_side};
+    Rectangle forward_rect = {start_btn_rect.x + start_btn_rect.width + seek_padding,
+                              start_btn_rect.y, seek_btn_side, seek_btn_side};
+    Button *forward_btn = new Button(forward_rect, ACCENT, ">", 50, BG_COLOR, 'l');
+    Button *backward_btn = new Button(backward_rect, ACCENT, "<", 50, BG_COLOR, 'h');
 
     // Main loop
     while (!WindowShouldClose()) {
@@ -321,13 +336,6 @@ int main() {
 
         draw_timer(time_left);
         draw_header(phase, pomodoro_nr);
-
-        // set the right cursor based on if we're hovering the button
-        if (CheckCollisionPointRec(GetMousePosition(), button)) {
-            SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
-        } else {
-            SetMouseCursor(MOUSE_CURSOR_DEFAULT);
-        }
 
         EndDrawing();
         // END DRAWING

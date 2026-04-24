@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <iostream>
 #include <raylib.h>
+#include <stdexcept>
 
 using namespace std;
 
@@ -24,36 +25,59 @@ void DrawVertThick(float x1, float y1, float x2, float y2, Color color, float th
 // 56px tall
 void DrawSevenSeg(float x1, float y1, int numToDraw, Color segColor) {
     // 5px corners => 30px middle segment?
-    int overallWidth = 30; // px
-    int lineWidth = 4;     // px
-    int cornerGapLen = 5;  // px
-    int segmentLen = 20;   // px
-    int a = 0x00001000;
-    cout << a << endl;
+    int lineWidth = 4;    // px
+    int cornerGapLen = 5; // px
+    int segmentLen = 20;  // px
+
+    if (numToDraw > 9 || numToDraw < 0) {
+        throw invalid_argument("0-9 please boss");
+    }
+
+    int bits[10];
+    bits[0] = 0b0111111;
+    bits[1] = 0b0000110;
+    bits[2] = 0b1011011;
+    bits[3] = 0b1001111;
+    bits[4] = 0b1100110;
+    bits[5] = 0b1101101;
+    bits[6] = 0b1111101;
+    bits[7] = 0b0000111;
+    bits[8] = 0b1111111;
+    bits[9] = 0b1100111;
+
+    int num = bits[numToDraw];
+
+    Color tmp;
 
     // top hori
-    DrawRectangle(x1 + cornerGapLen, y1, segmentLen, lineWidth, segColor);
+    tmp = ((num & (1 << 0)) != 0) ? segColor : GRAPHBRITE;
+    DrawRectangle(x1 + cornerGapLen, y1, segmentLen, lineWidth, tmp);
     // mid hori
+    tmp = ((num & (1 << 6)) != 0) ? segColor : GRAPHBRITE;
     DrawRectangle(x1 + cornerGapLen, y1 + segmentLen + cornerGapLen + (cornerGapLen - lineWidth),
-                  segmentLen, lineWidth, GRAPHBRITE);
+                  segmentLen, lineWidth, tmp);
     // bottom hori
+    tmp = ((num & (1 << 3)) != 0) ? segColor : GRAPHBRITE;
     DrawRectangle(x1 + cornerGapLen,
                   y1 + segmentLen + (cornerGapLen + 1) + (cornerGapLen - lineWidth) + lineWidth +
                       segmentLen + (cornerGapLen - lineWidth),
-                  segmentLen, lineWidth, segColor);
+                  segmentLen, lineWidth, tmp);
 
     // top left verti
-    DrawRectangle(x1, y1 + cornerGapLen, lineWidth, segmentLen, GRAPHBRITE);
+    tmp = ((num & (1 << 5)) != 0) ? segColor : GRAPHBRITE;
+    DrawRectangle(x1, y1 + cornerGapLen, lineWidth, segmentLen, tmp);
     // bottom left verti
+    tmp = ((num & (1 << 4)) != 0) ? segColor : GRAPHBRITE;
     DrawRectangle(x1, y1 + cornerGapLen + (cornerGapLen + 1) + segmentLen, lineWidth, segmentLen,
-                  GRAPHBRITE);
+                  tmp);
     // top right verti
+    tmp = ((num & (1 << 1)) != 0) ? segColor : GRAPHBRITE;
     DrawRectangle(x1 + cornerGapLen + segmentLen + (cornerGapLen - lineWidth), y1 + cornerGapLen,
-                  lineWidth, segmentLen, segColor);
+                  lineWidth, segmentLen, tmp);
     // bottom right verti
+    tmp = ((num & (1 << 2)) != 0) ? segColor : GRAPHBRITE;
     DrawRectangle(x1 + cornerGapLen + segmentLen + (cornerGapLen - lineWidth),
-                  y1 + cornerGapLen + (cornerGapLen + 1) + segmentLen, lineWidth, segmentLen,
-                  segColor);
+                  y1 + cornerGapLen + (cornerGapLen + 1) + segmentLen, lineWidth, segmentLen, tmp);
 }
 
 // 56px tall
@@ -62,8 +86,8 @@ void DrawTime(float x, float y) {
     // min
     Color segColor = YELLOWGREEN;
     int padding = 10;
-    DrawSevenSeg(x, y, 1, segColor);
-    DrawSevenSeg(x + 30 + padding, y, 1, segColor);
+    DrawSevenSeg(x, y, 2, segColor);
+    DrawSevenSeg(x + 30 + padding, y, 5, segColor);
 
     // colon
     int colonX = x + 30 + padding + 30 + padding;
@@ -72,8 +96,8 @@ void DrawTime(float x, float y) {
     DrawRectangle(colonX, colonY + 26, 4, 4, segColor);
 
     // sec
-    DrawSevenSeg(colonX + 4 + padding, y, 1, segColor);
-    DrawSevenSeg(colonX + 4 + padding + 30 + padding, y, 1, segColor);
+    DrawSevenSeg(colonX + 4 + padding, y, 6, segColor);
+    DrawSevenSeg(colonX + 4 + padding + 30 + padding, y, 7, segColor);
 }
 
 int main() {
